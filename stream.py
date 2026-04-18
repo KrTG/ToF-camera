@@ -6,16 +6,19 @@ from tof_camera import TofCamera
 PORT = 5000
 
 app = Flask(__name__)
-cam = TofCamera()
-cam.start()
+cam = None
 
 
 @app.route("/vid")
 def vid():
+    global cam
+    if cam is None:
+        cam = TofCamera()
+        cam.start()
+
     return Response(
         cam.get_frame(), mimetype="multipart/x-mixed-replace; boundary=frame"
     )
-
 
 @app.route("/")
 def index():
