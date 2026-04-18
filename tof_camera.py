@@ -103,6 +103,7 @@ class TofCamera:
 
 def get_frame():
     cam = TofCamera()
+    cam.start()
 
     while True:
         im = cam.get_frame()
