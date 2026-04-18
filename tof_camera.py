@@ -99,12 +99,12 @@ class TofCamera:
             if not selectRect.empty:
                 cv2.rectangle(result_image, selectRect.rect, BLACK, 2)
 
+            self.cam.releaseFrame(frame)
             return result_image
 
 def get_frame():
     cam = TofCamera()
     cam.start()
-
     while True:
         im = cam.get_frame()
         if im is not None:
