@@ -51,7 +51,6 @@ def on_confidence_changed(value):
 class TofCamera:
     def __init__(self, conf=None, max_distance=4000):
         self.cam = None
-        self.r = None
         self.conf = conf
         self.max_distance = max_distance
         self.started = False
@@ -78,16 +77,27 @@ class TofCamera:
             return
 
         self.cam.setControl(ac.Control.RANGE, self.max_distance)
-        self.r = self.cam.getControl(ac.Control.RANGE)
 
         info = self.cam.getCameraInfo()
         print(f"Camera resolution: {info.width}x{info.height}")
         print(f"Device type: {info.device_type}")
 
+        self.range = self.cam.getControl(ac.Control.RANGE)
+        self.exposure = self.cam.getControl(ac.Control.EXPOSURE)
+        self.denoise = self.cam.getControl(ac.Control.DENOISE)
+        self.auto_frame_rate = self.cam.getControl(ac.Control.AUTO_FRAME_RATE)
+        self.frame_rate = self.cam.getControl(ac.Control.FRAME_RATE)
+
+        print(f"Range: {self.range}")
+        print(f"Exposure: {self.exposure}")
+        print(f"Denoise: {self.denoise}")
+        print(f"Auto frame rate: {self.auto_frame_rate}")
+        print(f"Frame rate: {self.frame_rate}")
+
         self.started = True
 
     def get_frame(self):
-        if self.cam is None or self.r is None:
+        if not self.started or not self.cam or not self.range:
             print("Camera not initalized.")
             return
 
@@ -96,7 +106,7 @@ class TofCamera:
             depth_buf = frame.depth_data
             confidence_buf = frame.confidence_data
 
-            result_image = (depth_buf * (255.0 / self.r)).astype(np.uint8)
+            result_image = (depth_buf * (255.0 / self.range)).astype(np.uint8)
             result_image = cv2.applyColorMap(result_image, cv2.COLORMAP_RAINBOW)
             result_image = getPreviewRGB(result_image, confidence_buf)
 
