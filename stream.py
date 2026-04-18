@@ -1,6 +1,6 @@
-from flask import Flask, render_template, Response, url_for
+from flask import Flask, render_template, Response
 
-from tof_camera import get_frame
+from tof_camera import stream_frames
 
 PORT = 5000
 
@@ -11,7 +11,7 @@ cam = None
 @app.route("/vid")
 def vid():
     return Response(
-        get_frame(), mimetype="multipart/x-mixed-replace; boundary=frame"
+        stream_frames(), mimetype="multipart/x-mixed-replace; boundary=frame"
     )
 
 @app.route("/")
@@ -20,4 +20,4 @@ def index():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True, threaded=False)
+    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
