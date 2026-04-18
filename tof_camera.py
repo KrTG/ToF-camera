@@ -105,7 +105,6 @@ class TofCamera:
         while True:
             im = self.get_frame_raw()
             if im is not None:
-                frame = self.get_frame_raw()
                 imgencode=cv2.imencode('.jpg',frame)[1]
                 stringData=imgencode.tobytes()
                 yield (b'--frame\r\n'
