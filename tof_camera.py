@@ -102,13 +102,22 @@ class TofCamera:
             self.cam.releaseFrame(frame)
             return result_image
 
-def get_frame():
-    cam = TofCamera()
-    cam.start()
+cam = None
+frame = None
+def stream_frames():
+    global cam
+    global frame
+
+    if cam is None:
+        cam = TofCamera()
+        cam.start()
+
     while True:
         im = cam.get_frame()
         if im is not None:
             imgencode=cv2.imencode('.jpg',im)[1]
             stringData=imgencode.tobytes()
-            yield (b'--frame\r\n'
-                b'Content-Type: text/plain\r\n\r\n'+stringData+b'\r\n')
+            output = b'--frame\r\n'b'Content-Type: text/plain\r\n\r\n'+stringData+b'\r\n'
+            frame = output
+        if frame is not None:
+            yield frame
