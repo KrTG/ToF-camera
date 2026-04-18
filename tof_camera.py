@@ -81,7 +81,7 @@ class TofCamera:
         print(f"Camera resolution: {info.width}x{info.height}")
         print(f"Device type: {info.device_type}")
 
-    def get_frame_raw(self):
+    def get_frame(self):
         if self.cam is None or self.r is None:
             print("Camera not initalized.")
             return
@@ -101,11 +101,13 @@ class TofCamera:
 
             return result_image
 
-    def get_frame(self):
-        while True:
-            im = self.get_frame_raw()
-            if im is not None:
-                imgencode=cv2.imencode('.jpg',im)[1]
-                stringData=imgencode.tobytes()
-                yield (b'--frame\r\n'
-                    b'Content-Type: text/plain\r\n\r\n'+stringData+b'\r\n')
+def get_frame():
+    cam = TofCamera()
+
+    while True:
+        im = cam.get_frame()
+        if im is not None:
+            imgencode=cv2.imencode('.jpg',im)[1]
+            stringData=imgencode.tobytes()
+            yield (b'--frame\r\n'
+                b'Content-Type: text/plain\r\n\r\n'+stringData+b'\r\n')

@@ -1,7 +1,6 @@
 from flask import Flask, render_template, Response, url_for
 
-from regular_camera import get_frame
-from tof_camera import TofCamera
+from tof_camera import get_frame
 
 PORT = 5000
 
@@ -11,13 +10,8 @@ cam = None
 
 @app.route("/vid")
 def vid():
-    global cam
-    if cam is None:
-        cam = TofCamera()
-        cam.start()
-
     return Response(
-        cam.get_frame(), mimetype="multipart/x-mixed-replace; boundary=frame"
+        get_frame(), mimetype="multipart/x-mixed-replace; boundary=frame"
     )
 
 @app.route("/")
