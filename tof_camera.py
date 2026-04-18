@@ -1,3 +1,5 @@
+import time
+
 import cv2
 import numpy as np
 import ArducamDepthCamera as ac
@@ -52,6 +54,7 @@ class TofCamera:
         self.r = None
         self.conf = conf
         self.max_distance = max_distance
+        self.started = False
 
     def start(self):
         print("Arducam Depth Camera Streaming.")
@@ -81,12 +84,14 @@ class TofCamera:
         print(f"Camera resolution: {info.width}x{info.height}")
         print(f"Device type: {info.device_type}")
 
+        self.started = True
+
     def get_frame(self):
         if self.cam is None or self.r is None:
             print("Camera not initalized.")
             return
 
-        frame = self.cam.requestFrame(2000)
+        frame = self.cam.requestFrame(200)
         if frame is not None and isinstance(frame, ac.DepthData):
             depth_buf = frame.depth_data
             confidence_buf = frame.confidence_data
@@ -102,15 +107,14 @@ class TofCamera:
             self.cam.releaseFrame(frame)
             return result_image
 
-cam = None
+cam = TofCamera()
 frame = None
 def stream_frames():
     print("Streaming video")
     global cam
     global frame
 
-    if cam is None:
-        cam = TofCamera()
+    if not cam.started:
         cam.start()
 
     while True:
@@ -122,3 +126,4 @@ def stream_frames():
             frame = output
         if frame is not None:
             yield frame
+            time.sleep(0.033)
