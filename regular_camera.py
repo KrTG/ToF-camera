@@ -1,5 +1,6 @@
 import cv2
 
+
 def get_frame():
     camera_port=0
     camera=cv2.VideoCapture(camera_port) #this makes a web cam object
