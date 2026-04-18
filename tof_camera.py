@@ -105,6 +105,7 @@ class TofCamera:
 cam = None
 frame = None
 def stream_frames():
+    print("Streaming video")
     global cam
     global frame
 
