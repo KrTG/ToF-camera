@@ -11,10 +11,13 @@ WHITE = (255, 255, 255)
 
 
 class TofCamera:
-    def __init__(self, range=conf.RANGE):
+    def __init__(self, range=conf.RANGE, frame_timeout=200):
         self.cam = None
         self.range = range
+        self.frame_timeout = frame_timeout
         self.started = False
+
+        self.clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
 
     def start(self):
         print("Arducam Depth Camera Streaming.")
@@ -37,6 +40,7 @@ class TofCamera:
         self.cam.setControl(ac.Control.AUTO_FRAME_RATE, 0)
 
         info = self.cam.getCameraInfo()
+        print("----CAMERA SETTINGS----")
         print(f"Camera resolution: {info.width}x{info.height}")
         print(f"Device type: {info.device_type}")
 
@@ -50,6 +54,10 @@ class TofCamera:
         self.skip_frame = self.cam.getControl(ac.Control.SKIP_FRAME)
         self.skip_frame_loop = self.cam.getControl(ac.Control.SKIP_FRAME_LOOP)
         self.auto_frame_rate = self.cam.getControl(ac.Control.AUTO_FRAME_RATE)
+        self.fx = self.cam.getControl(ac.Control.INTRINSIC_FX)
+        self.fy = self.cam.getControl(ac.Control.INTRINSIC_FY)
+        self.cx = self.cam.getControl(ac.Control.INTRINSIC_CX)
+        self.cy = self.cam.getControl(ac.Control.INTRINSIC_CY)
         self.denoise = self.cam.getControl(ac.Control.DENOISE)
 
         print(f"Range: {self.range}")
@@ -62,7 +70,12 @@ class TofCamera:
         print(f"Skip frame: {self.skip_frame}")
         print(f"Skip frame loop: {self.skip_frame_loop}")
         print(f"Auto frame rate: {self.auto_frame_rate}")
+        print(f"Intrinsic FX: {self.fx}")
+        print(f"Intrinsic FY: {self.fy}")
+        print(f"Intrinsic CX: {self.cx}")
+        print(f"Intrinsic CY: {self.cy}")
         print(f"Denoise: {self.denoise}")
+        print("--------")
 
         self.started = True
 
@@ -73,12 +86,23 @@ class TofCamera:
         self.cam.stop()
         self.cam.close()
 
-    def get_frame_raw(self, timeout=200):
+    def get_intrinsic_matrix(self):
+        if not self.started or not self.fx or not self.fy or not self.cx or not self.cy:
+            print("Camera not initalized.")
+            return
+
+        return np.array([
+            [self.fx,   0,          self.cx],
+            [0,         self.fy,    self.cy],
+            [0,         0,          1]
+        ], dtype=np.float32) / 100
+
+    def get_frame_raw(self):
         if not self.started or not self.cam or not self.range:
             print("Camera not initalized.")
             return
 
-        frame = self.cam.requestFrame(timeout)
+        frame = self.cam.requestFrame(self.frame_timeout)
         if frame is not None and isinstance(frame, ac.DepthData):
             return frame
 
@@ -103,7 +127,7 @@ class TofCamera:
             self.cam.releaseFrame(frame)
             return result_image
 
-    def get_amplitude_rgb(self):
+    def get_amplitude_grayscale(self):
         if not self.started or not self.cam or not self.range:
             print("Camera not initalized.")
             return
@@ -111,15 +135,41 @@ class TofCamera:
         frame = self.get_frame_raw()
         if frame is not None:
             data = frame.amplitude_data
-            #print(f"MIN MAX: {np.min(data)} {np.max(data)}")
-            result_image = np.clip(data * (255.0 / 1000), 0, 255).astype(np.uint8)
-            #result_image = cv2.applyColorMap(result_image, cv2.COLORMAP_RAINBOW)
-
+            alpha = 0.08 # TODO: Implement adaptive alpha to adjust for lightning conditions
+            temp_8u = cv2.convertScaleAbs(data, alpha=alpha)
+            result_image = self.clahe.apply(temp_8u)
             self.cam.releaseFrame(frame)
             return result_image
 
+    def get_frame_rgbd(self):
+        if not self.started or not self.cam or not self.range:
+            print("Camera not initalized.")
+            return (None, None)
+
+        frame = self.get_frame_raw()
+        if frame is not None:
+            alpha = 0.08 # TODO: Implement adaptive alpha to adjust for lightning conditions
+
+            confidence = frame.confidence_data
+
+            amplitude = frame.amplitude_data
+            amplitude = cv2.convertScaleAbs(amplitude, alpha=alpha)
+            amplitude = self.clahe.apply(amplitude)
+
+            depth = frame.depth_data
+            depth = np.where(confidence < 30, 0.0, depth).astype(np.float32) / 1000.0
+
+            self.cam.releaseFrame(frame)
+
+            return amplitude, depth
+
+        return (None, None)
+
+
 cam = TofCamera()
 frame = None
+
+
 def stream_frames():
     print("Streaming video")
     global cam
@@ -129,11 +179,14 @@ def stream_frames():
         cam.start()
 
     while True:
-        im = cam.get_depth_rgb()
+        im = cam.get_amplitude_grayscale()
         if im is not None:
-            imgencode=cv2.imencode('.jpg',im)[1]
-            stringData=imgencode.tobytes()
-            output = b'--frame\r\n'b'Content-Type: text/plain\r\n\r\n'+stringData+b'\r\n'
+            imgencode = cv2.imencode(".jpg", im)[1]
+            stringData = imgencode.tobytes()
+            output = (
+                b"--frame\r\n"
+                b"Content-Type: text/plain\r\n\r\n" + stringData + b"\r\n"
+            )
             frame = output
         if frame is not None:
             yield frame
