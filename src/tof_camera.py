@@ -4,6 +4,8 @@ import cv2
 import numpy as np
 import ArducamDepthCamera as ac
 
+from src import conf
+
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 
@@ -49,10 +51,10 @@ def on_confidence_changed(value):
 
 
 class TofCamera:
-    def __init__(self, conf=None, max_distance=4000):
+    def __init__(self, conf=None, range=4000):
         self.cam = None
         self.conf = conf
-        self.max_distance = max_distance
+        self.range = range
         self.started = False
 
     def start(self):
@@ -61,11 +63,7 @@ class TofCamera:
 
         self.cam = ac.ArducamCamera()
 
-        ret = 0
-        if self.conf is not None:
-            ret = self.cam.openWithFile(self.conf, 0)
-        else:
-            ret = self.cam.open(ac.Connection.CSI, 0)
+        ret = self.cam.open(ac.Connection.CSI, 0)
         if ret != 0:
             print("Failed to open camera. Error code:", ret)
             return
@@ -76,7 +74,8 @@ class TofCamera:
             self.cam.close()
             return
 
-        self.cam.setControl(ac.Control.RANGE, self.max_distance)
+        self.cam.setControl(ac.Control.RANGE, self.range)
+        self.cam.setControl(ac.Control.AUTO_FRAME_RATE, 0)
 
         info = self.cam.getCameraInfo()
         print(f"Camera resolution: {info.width}x{info.height}")
@@ -136,7 +135,7 @@ class TofCamera:
             self.cam.releaseFrame(frame)
             return result_image
 
-cam = TofCamera()
+cam = TofCamera(range=conf.RANGE)
 frame = None
 def stream_frames():
     print("Streaming video")
