@@ -144,26 +144,27 @@ class TofCamera:
     def get_frame_rgbd(self):
         if not self.started or not self.cam or not self.range:
             print("Camera not initalized.")
-            return (None, None)
+            return (None, None, None)
 
         frame = self.get_frame_raw()
         if frame is not None:
             alpha = 0.08 # TODO: Implement adaptive alpha to adjust for lightning conditions
 
             confidence = frame.confidence_data
+            mask = (confidence >= 30).astype(np.uint8) * 255
 
             amplitude = frame.amplitude_data
             amplitude = cv2.convertScaleAbs(amplitude, alpha=alpha)
             amplitude = self.clahe.apply(amplitude)
 
             depth = frame.depth_data
-            depth = np.where(confidence < 30, 0.0, depth).astype(np.float32) / 1000.0
+            depth = depth.astype(np.float32) / 1000.0
 
             self.cam.releaseFrame(frame)
 
-            return amplitude, depth
+            return amplitude, depth, mask
 
-        return (None, None)
+        return (None, None, None)
 
 
 cam = TofCamera()
