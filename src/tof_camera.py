@@ -10,50 +10,9 @@ BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 
 
-class UserRect:
-    def __init__(self) -> None:
-        self.start_x = 0
-        self.start_y = 0
-        self.end_x = 0
-        self.end_y = 0
-
-    @property
-    def rect(self):
-        return (
-            self.start_x,
-            self.start_y,
-            self.end_x - self.start_x,
-            self.end_y - self.start_y,
-        )
-
-    @property
-    def slice(self):
-        return (slice(self.start_y, self.end_y), slice(self.start_x, self.end_x))
-
-    @property
-    def empty(self):
-        return self.start_x == self.end_x and self.start_y == self.end_y
-
-
-confidence_value = 30
-selectRect, followRect = UserRect(), UserRect()
-
-
-def getPreviewRGB(preview: np.ndarray, confidence: np.ndarray) -> np.ndarray:
-    preview = np.nan_to_num(preview)
-    preview[confidence < confidence_value] = (0, 0, 0)
-    return preview
-
-
-def on_confidence_changed(value):
-    global confidence_value
-    confidence_value = value
-
-
 class TofCamera:
-    def __init__(self, conf=None, range=4000):
+    def __init__(self, range=conf.RANGE):
         self.cam = None
-        self.conf = conf
         self.range = range
         self.started = False
 
@@ -114,28 +73,52 @@ class TofCamera:
         self.cam.stop()
         self.cam.close()
 
-    def get_frame(self):
+    def get_frame_raw(self, timeout=200):
         if not self.started or not self.cam or not self.range:
             print("Camera not initalized.")
             return
 
-        frame = self.cam.requestFrame(200)
+        frame = self.cam.requestFrame(timeout)
         if frame is not None and isinstance(frame, ac.DepthData):
-            depth_buf = frame.depth_data
-            confidence_buf = frame.confidence_data
+            return frame
 
-            result_image = (depth_buf * (255.0 / self.range)).astype(np.uint8)
+    def release_frame_raw(self, frame):
+        if not self.started or not self.cam or not self.range:
+            print("Camera not initalized.")
+            return
+        self.cam.releaseFrame(frame)
+
+    def get_depth_rgb(self):
+        if not self.started or not self.cam or not self.range:
+            print("Camera not initalized.")
+            return
+
+        frame = self.get_frame_raw()
+        if frame is not None:
+            data = frame.depth_data
+
+            result_image = np.clip(data * (255.0 / self.range), 0, 255).astype(np.uint8)
             result_image = cv2.applyColorMap(result_image, cv2.COLORMAP_RAINBOW)
-            result_image = getPreviewRGB(result_image, confidence_buf)
-
-            cv2.rectangle(result_image, followRect.rect, WHITE, 1)
-            if not selectRect.empty:
-                cv2.rectangle(result_image, selectRect.rect, BLACK, 2)
 
             self.cam.releaseFrame(frame)
             return result_image
 
-cam = TofCamera(range=conf.RANGE)
+    def get_amplitude_rgb(self):
+        if not self.started or not self.cam or not self.range:
+            print("Camera not initalized.")
+            return
+
+        frame = self.get_frame_raw()
+        if frame is not None:
+            data = frame.amplitude_data
+            #print(f"MIN MAX: {np.min(data)} {np.max(data)}")
+            result_image = np.clip(data * (255.0 / 1000), 0, 255).astype(np.uint8)
+            #result_image = cv2.applyColorMap(result_image, cv2.COLORMAP_RAINBOW)
+
+            self.cam.releaseFrame(frame)
+            return result_image
+
+cam = TofCamera()
 frame = None
 def stream_frames():
     print("Streaming video")
@@ -146,7 +129,7 @@ def stream_frames():
         cam.start()
 
     while True:
-        im = cam.get_frame()
+        im = cam.get_depth_rgb()
         if im is not None:
             imgencode=cv2.imencode('.jpg',im)[1]
             stringData=imgencode.tobytes()
