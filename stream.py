@@ -1,6 +1,6 @@
 from flask import Flask, render_template, Response
 
-from tof_camera import stream_frames
+from src.tof_camera import stream_frames
 
 PORT = 5000
 

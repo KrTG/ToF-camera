@@ -83,18 +83,37 @@ class TofCamera:
         print(f"Device type: {info.device_type}")
 
         self.range = self.cam.getControl(ac.Control.RANGE)
+        self.fmt_height = self.cam.getControl(ac.Control.FMT_WIDTH)
+        self.fmt_width = self.cam.getControl(ac.Control.FMT_HEIGHT)
+        self.mode = self.cam.getControl(ac.Control.MODE)
+        self.frame_mode = self.cam.getControl(ac.Control.FRAME_MODE)
         self.exposure = self.cam.getControl(ac.Control.EXPOSURE)
-        self.denoise = self.cam.getControl(ac.Control.DENOISE)
-        self.auto_frame_rate = self.cam.getControl(ac.Control.AUTO_FRAME_RATE)
         self.frame_rate = self.cam.getControl(ac.Control.FRAME_RATE)
+        self.skip_frame = self.cam.getControl(ac.Control.SKIP_FRAME)
+        self.skip_frame_loop = self.cam.getControl(ac.Control.SKIP_FRAME_LOOP)
+        self.auto_frame_rate = self.cam.getControl(ac.Control.AUTO_FRAME_RATE)
+        self.denoise = self.cam.getControl(ac.Control.DENOISE)
 
         print(f"Range: {self.range}")
+        print(f"Fmt width: {self.fmt_width}")
+        print(f"Fmt height: {self.fmt_height}")
+        print(f"Mode: {self.mode}")
+        print(f"Frame mode: {self.frame_mode}")
         print(f"Exposure: {self.exposure}")
-        print(f"Denoise: {self.denoise}")
-        print(f"Auto frame rate: {self.auto_frame_rate}")
         print(f"Frame rate: {self.frame_rate}")
+        print(f"Skip frame: {self.skip_frame}")
+        print(f"Skip frame loop: {self.skip_frame_loop}")
+        print(f"Auto frame rate: {self.auto_frame_rate}")
+        print(f"Denoise: {self.denoise}")
 
         self.started = True
+
+    def stop(self):
+        if not self.started or not self.cam:
+            print("Camera not initalized.")
+            return
+        self.cam.stop()
+        self.cam.close()
 
     def get_frame(self):
         if not self.started or not self.cam or not self.range:

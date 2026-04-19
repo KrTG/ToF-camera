@@ -2,5 +2,6 @@
 __pycache__/
 *.py[codz]
 
-recordings/
+.env
+out/
 venv/
