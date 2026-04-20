@@ -15,7 +15,9 @@ while True:
     amplitude, depth, mask, prep_time = camera.get_frame_rgbd()
 
     if amplitude is not None and depth is not None:
-        global_pose, odo_time = odometry.next_frame(amplitude, depth, mask, frame_number)
+        global_pose, odo_time, cache_time, compute_time = odometry.next_frame(
+            amplitude, depth, mask, frame_number
+        )
 
         frame_number += 1
     else:
@@ -24,4 +26,6 @@ while True:
     if (frame_number + 1) % 100 == 0:
         print("Time budget: 33 ms")
         print(f"Pre-processing time: {prep_time / 1000000} ms")
-        print(f"Processing time: {odo_time / 1000000} ms")
+        print(
+            f"Processing time: {odo_time / 1000000} ms (cache: {cache_time / 1000000}, compute: {compute_time / 1000000})"
+        )

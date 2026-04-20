@@ -94,7 +94,7 @@ class TofCamera:
         return np.array([
             [self.fx,   0,          self.cx],
             [0,         self.fy,    self.cy],
-            [0,         0,          1]
+            [0,         0,          100]
         ], dtype=np.float32) / 100
 
     def get_frame_raw(self):

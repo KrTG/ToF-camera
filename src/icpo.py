@@ -3,7 +3,9 @@ import time
 import cv2
 import numpy as np
 
+from src.profileit import profileit
 from src import conf
+
 
 class IcpOdometry:
     def __init__(
@@ -12,12 +14,19 @@ class IcpOdometry:
         min_depth=conf.ICPO_MIN_DEPTH,
         max_depth=conf.ICPO_MAX_DEPTH,
         max_depth_diff=conf.ICPO_MAX_DEPTH_DIFF,
+        max_points_part=conf.ICPO_MAX_POINTS_PART,
+        iter_counts=conf.ICPO_ITER_COUNTS,
+        gradient_magnitudes=conf.ICPO_GRADIENT_MAGNITUDES
     ):
         self.icpo = cv2.rgbd.RgbdICPOdometry.create(
             cameraMatrix=cam_matrix,
             minDepth=min_depth,
             maxDepth=max_depth,
             maxDepthDiff=max_depth_diff,
+            maxPointsPart=max_points_part,
+            iterCounts=iter_counts,
+            minGradientMagnitudes=gradient_magnitudes,
+            transformType=4 # Default
         )
         print("----ICPO SETTINGS----")
         print(f"Camera matrix: {self.icpo.getCameraMatrix()}")
@@ -42,6 +51,7 @@ class IcpOdometry:
         self.icpo.prepareFrameCache(
             current_odometry_frame, cv2.rgbd.ODOMETRY_FRAME_CACHE_ALL
         )
+        _cache_time = time.monotonic_ns()
 
         if self.anchor_odometry_frame is not None:
             success, transform = self.icpo.compute2(
@@ -58,4 +68,11 @@ class IcpOdometry:
         else:
             self.anchor_odometry_frame = current_odometry_frame
 
-        return self.global_pose, time.monotonic_ns() - _start_time
+        _compute_time = time.monotonic_ns()
+
+        return (
+            self.global_pose,
+            _compute_time - _start_time,
+            _cache_time - _start_time,
+            _compute_time - _cache_time,
+        )
