@@ -153,7 +153,7 @@ class TofCamera:
             alpha = 0.08 # TODO: Implement adaptive alpha to adjust for lightning conditions
 
             confidence = frame.confidence_data
-            mask = (confidence >= 30).astype(np.uint8) * 255
+            mask = (confidence >= conf.ICPO_CONFIDENCE).astype(np.uint8) * 255
 
             amplitude = frame.amplitude_data
             amplitude = cv2.convertScaleAbs(amplitude, alpha=alpha)

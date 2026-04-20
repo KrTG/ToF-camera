@@ -42,6 +42,7 @@ class IcpOdometry:
         self.anchor_odometry_frame = None
         self.previous_transform = np.eye(4, dtype=np.float64)
         self.global_pose = np.eye(4, dtype=np.float64)
+        self.skipped_frames = 0
 
     def next_frame(self, amplitude, depth, mask, frame_id):
         _start_time = time.monotonic_ns()
@@ -54,17 +55,35 @@ class IcpOdometry:
         _cache_time = time.monotonic_ns()
 
         if self.anchor_odometry_frame is not None:
+            # Scale the initial transformation by the amount of lost frames
+            init_rt = self.previous_transform
+            if self.skipped_frames > 0:
+                init_rt = np.linalg.matrix_power(init_rt, self.skipped_frames + 1)
+
             success, transform = self.icpo.compute2(
                 self.anchor_odometry_frame,
                 current_odometry_frame,
-                initRt=self.previous_transform,
+                initRt=init_rt
             )
             if success:
-                self.global_pose = self.global_pose @ transform
+                self.global_pose @= transform
                 self.anchor_odometry_frame = current_odometry_frame
-                self.previous_transform = transform
+
+                if self.skipped_frames == 0:
+                    self.previous_transform = transform
+                else:
+                    # TODO: Average out the transform for initRt
+                    self.skipped_frames = 0
             else:
-                print(self.anchor_odometry_frame.ID - frame_id)
+                self.skipped_frames += 1
+                print(f"Skipped frames: {self.skipped_frames}")
+                if self.skipped_frames > 4:
+                    print("Lost tracking. Re-set using linear prediction.")
+                    jump = np.linalg.matrix_power(self.previous_transform, self.skipped_frames + 1)
+                    self.global_pose @= jump
+                    self.anchor_odometry_frame = current_odometry_frame
+                    self.skipped_frames = 0
+                    self.previous_transform = np.eye(4, dtype=np.float64)
         else:
             self.anchor_odometry_frame = current_odometry_frame
 
