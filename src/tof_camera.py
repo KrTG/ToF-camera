@@ -142,9 +142,11 @@ class TofCamera:
             return result_image
 
     def get_frame_rgbd(self):
+        _start_time = time.monotonic_ns()
+
         if not self.started or not self.cam or not self.range:
             print("Camera not initalized.")
-            return (None, None, None)
+            return (None, None, None, 0)
 
         frame = self.get_frame_raw()
         if frame is not None:
@@ -162,9 +164,9 @@ class TofCamera:
 
             self.cam.releaseFrame(frame)
 
-            return amplitude, depth, mask
+            return amplitude, depth, mask, time.monotonic_ns() - _start_time
 
-        return (None, None, None)
+        return (None, None, None, 0)
 
 
 cam = TofCamera()
