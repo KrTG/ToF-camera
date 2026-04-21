@@ -7,10 +7,21 @@ PORT = 5000
 app = Flask(__name__)
 
 
-@app.route("/vid")
-def vid():
+@app.route("/vid0")
+def vid0():
     return Response(
-        stream_frames(), mimetype="multipart/x-mixed-replace; boundary=frame"
+        stream_frames("amplitude"), mimetype="multipart/x-mixed-replace; boundary=frame"
+    )
+
+@app.route("/vid1")
+def vid1():
+    return Response(
+        stream_frames("depth"), mimetype="multipart/x-mixed-replace; boundary=frame"
+    )
+@app.route("/vid2")
+def vid2():
+    return Response(
+        stream_frames("mask"), mimetype="multipart/x-mixed-replace; boundary=frame"
     )
 
 @app.route("/")
