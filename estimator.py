@@ -1,3 +1,5 @@
+import math
+
 from src.icpo import IcpOdometry
 from src.tof_camera import TofCamera
 
@@ -11,6 +13,18 @@ last_frame_time = None
 frame_times = []
 frame_number = 0
 
+
+def get_translation(pose):
+    return (pose[2, 3], pose[1, 3], -pose[0, 3])
+
+
+def get_rotation(pose):
+    pitch = math.atan2(-pose[2, 0], math.sqrt(pose[0, 0] ** 2 + pose[1, 0] ** 2))
+    yaw = math.atan2(pose[1, 0], pose[0, 0])
+    roll = math.atan2(pose[2, 1], pose[2, 2])
+    return roll, pitch, yaw
+
+
 while True:
     amplitude, depth, mask, prep_time = camera.get_rgbd()
 
@@ -21,7 +35,9 @@ while True:
 
         frame_number += 1
     else:
-        raise RuntimeError(f"Frames should not be getting dropped.{amplitude}, {depth}, {mask}")
+        raise RuntimeError(
+            f"Frames should not be getting dropped.{amplitude}, {depth}, {mask}"
+        )
 
     if (frame_number + 1) % 100 == 0:
         print("Time budget: 33 ms")
@@ -29,3 +45,5 @@ while True:
         print(
             f"Processing time: {odo_time / 1000000} ms (cache: {cache_time / 1000000}, compute: {compute_time / 1000000})"
         )
+        print(f"Position: {get_translation(global_pose)}")
+        print(f"Attitude: {get_rotation(global_pose)}")
