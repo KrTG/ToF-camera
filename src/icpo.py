@@ -80,7 +80,7 @@ class IcpOdometry:
             else:
                 self.skipped_frames += 1
                 print(f"Skipped frames: {self.skipped_frames}")
-                if self.skipped_frames > 4:
+                if self.skipped_frames > 2:
                     print("Lost tracking. Re-set using linear prediction.")
                     jump = np.linalg.matrix_power(self.previous_transform, self.skipped_frames + 1)
                     self.global_pose @= jump

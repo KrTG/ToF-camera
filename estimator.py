@@ -171,8 +171,8 @@ def get_rotation_degrees(pose):
 
 
 def main():
-    SCALE = 0.7
-    FPS_DIVISOR = 4
+    SCALE = 1
+    FPS_DIVISOR = 3
     camera = TofCamera(scale=SCALE, frame_timeout=6000)
     camera.start()
     odometry = IcpOdometry(camera.get_intrinsic_matrix())
