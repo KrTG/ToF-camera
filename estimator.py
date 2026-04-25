@@ -1,30 +1,39 @@
 import math
 import os
-from threading import Condition, Lock, Thread
+from threading import Condition, Thread
+from typing import Optional, Tuple
 
 from src.icpo import IcpOdometry
 from src.tof_camera import TofCamera
 
+class PipelineThread(Thread):
+    def __init__(self):
+        super().__init__()
 
-camera = TofCamera(scale=0.7, frame_timeout=6000)
-camera.start()
+        self.running = False
+        self.condition = Condition()
+        self.frame = None
 
-odometry = IcpOdometry(camera.get_intrinsic_matrix())
+    def get_frame(self) -> Optional[Tuple]:
+        with self.condition:
+            while self.frame is None and self.running:
+                self.condition.wait()
+            acquired_frame = self.frame
+            self.frame = None
+            return acquired_frame
 
-last_frame_time = None
-frame_times = []
-frame_number = 0
+    def stop(self):
+        with self.condition:
+            self.running = False
+            self.condition.notify_all()
 
 
-class CameraThread(Thread):
+class CameraThread(PipelineThread):
     def __init__(self, camera: TofCamera, framerate_divisor: int = 1):
         super().__init__()
         self.camera = camera
         self.divisor = framerate_divisor
 
-        self.running = False
-        self.condition = Condition()
-        self.frame = None
         self.frame_counter = 0
 
     def run(self):
@@ -46,33 +55,26 @@ class CameraThread(Thread):
                     # We should process this frame
                     with self.condition:
                         if self.frame is not None:
-                            print("Camera: Next frame ready, while previous was not acquired!")
+                            print(
+                                "Camera: Next frame ready, while previous was not acquired!"
+                            )
                             self.running = False
                             break
                         self.frame = frame
                         self.condition.notify()
         finally:
             with self.condition:
-                 self.running = False
-                 self.condition.notify_all()
+                self.running = False
+                self.condition.notify_all()
 
-    def get_frame(self):
-        with self.condition:
-            while self.frame is None and self.running:
-                self.condition.wait()
-            acquired_frame = self.frame
-            self.frame = None
-            return acquired_frame
 
-class PrepareFrameThread(Thread):
+
+class PrepareFrameThread(PipelineThread):
     def __init__(self, camera_thread: CameraThread, odometry: IcpOdometry):
         super().__init__()
         self.camera_thread = camera_thread
         self.odometry = odometry
 
-        self.running = False
-        self.condition = Condition()
-        self.frame = None
         self.frame_counter = 0
 
     def run(self):
@@ -85,15 +87,19 @@ class PrepareFrameThread(Thread):
                     break
 
                 amplitude, depth, mask, times = frame
-                odometry_frame, _time = self.odometry.prepare_frame(amplitude, depth, mask, self.frame_counter)
-                times["prepare_frame"] = _time
+                odometry_frame, _time = self.odometry.prepare_frame(
+                    amplitude, depth, mask, self.frame_counter
+                )
+                times["cache"] = _time
                 frame = (odometry_frame, times)
 
                 self.frame_counter += 1
 
                 with self.condition:
                     if self.frame is not None:
-                        print("Prepare: Next frame ready, while previous was not acquired!")
+                        print(
+                            "Prepare: Next frame ready, while previous was not acquired!"
+                        )
                         self.running = False
                         break
 
@@ -101,25 +107,16 @@ class PrepareFrameThread(Thread):
                     self.condition.notify()
         finally:
             with self.condition:
-                 self.running = False
-                 self.condition.notify_all()
+                self.running = False
+                self.condition.notify_all()
 
-    def get_frame(self):
-        with self.condition:
-            while self.frame is None and self.running:
-                self.condition.wait()
-            acquired_frame = self.frame
-            self.frame = None
-            return acquired_frame
 
-class ComputeThread(Thread):
+class ComputeThread(PipelineThread):
     def __init__(self, prepare_frame_thread: PrepareFrameThread, odometry: IcpOdometry):
         super().__init__()
         self.prepare_thread = prepare_frame_thread
         self.odometry = odometry
 
-        self.running = False
-        self.condition = Condition()
         self.frame = None
 
     def run(self):
@@ -133,32 +130,30 @@ class ComputeThread(Thread):
 
                 odometry_frame, times = frame
                 pose, _time = self.odometry.compute_frame(odometry_frame)
-                times["compute_frame"] = _time
-                frame = (pose, times)
+                times["compute"] = _time
+                frame = (pose, odometry_frame.ID, times)
+
+                if os.path.isfile("/tmp/reset"):
+                    os.remove("/tmp/reset")
+                    self.odometry.reset_position()
+                    print("Position reset by user.")
 
                 with self.condition:
                     if self.frame is not None:
-                        print("Compute: Next frame ready, while previous was not acquired!")
+                        print(
+                            "Compute: Next frame ready, while previous was not acquired!"
+                        )
                         self.running = False
                         break
                     self.frame = frame
                     self.condition.notify()
         finally:
             with self.condition:
-                 self.running = False
-                 self.condition.notify_all()
-
-    def get_frame(self):
-        with self.condition:
-            while self.frame is None and self.running:
-                self.condition.wait()
-            acquired_frame = self.frame
-            self.frame = None
-            return acquired_frame
+                self.running = False
+                self.condition.notify_all()
 
 
-# Everything is inverted
-
+# Everything is inverted!
 def get_translation(pose):
     return (-pose[2, 3], -pose[0, 3], -pose[1, 3])
 
@@ -169,40 +164,58 @@ def get_rotation(pose):
     pitch = -math.atan2(pose[2, 1], pose[2, 2])
     return roll, pitch, yaw
 
+
 def get_rotation_degrees(pose):
     r, p, y = get_rotation(pose)
     return math.degrees(r), math.degrees(p), math.degrees(y)
 
 
-while True:
-    amplitude, depth, mask, prep_time = camera.get_rgbd()
+def main():
+    SCALE = 0.7
+    FPS_DIVISOR = 4
+    camera = TofCamera(scale=SCALE, frame_timeout=6000)
+    camera.start()
+    odometry = IcpOdometry(camera.get_intrinsic_matrix())
+    camera_thread = CameraThread(camera, FPS_DIVISOR)
+    prepare_frame_thread = PrepareFrameThread(camera_thread, odometry)
+    compute_thread = ComputeThread(prepare_frame_thread, odometry)
 
-    if amplitude is not None and depth is not None and mask is not None:
-        if os.path.isfile("/tmp/reset"):
-            os.remove("/tmp/reset")
-            odometry.reset_position()
-            print("Position reset by user.")
-        global_pose, odo_time, cache_time, compute_time = odometry.next_frame(
-            amplitude, depth, mask, frame_number
-        )
+    camera_thread.start()
+    prepare_frame_thread.start()
+    compute_thread.start()
+    try:
+        while True:
+            frame = compute_thread.get_frame()
+            if frame is None:
+                break
+            global_pose, frame_id, times = frame
+            prep_time = times["camera"]
+            cache_time = times["cache"]
+            compute_time = times["compute"]
 
-        frame_number += 1
-    else:
-        raise RuntimeError(
-            f"Frames should not be getting dropped.{amplitude}, {depth}, {mask}"
-        )
+            if (frame_id + 1) % 50 == 0:
+                print(f"Time budget: {33 * FPS_DIVISOR} ms")
+                print(f"Pre-processing time: {prep_time / 1000000} ms")
+                print(f"Prepare frame time: {cache_time / 1000000} ms")
+                print(f"Compute odometry time: {compute_time / 1000000} ms")
 
-    if (frame_number + 1) % 100 == 0:
-        print("Time budget: 33 ms")
-        print(f"Pre-processing time: {prep_time / 1000000} ms")
-        print(
-            f"Processing time: {odo_time / 1000000} ms (cache: {cache_time / 1000000}, compute: {compute_time / 1000000})"
-        )
-        x, y, z = get_translation(global_pose)
-        print(f"X (forwards/backwards): {x}")
-        print(f"Y (right/left): {y}")
-        print(f"Z (down/up): {z}")
-        roll, pitch, yaw = get_rotation_degrees(global_pose)
-        print(f"Roll: {roll}")
-        print(f"Pitch: {pitch}")
-        print(f"Yaw: {yaw}")
+                x, y, z = get_translation(global_pose)
+                print(f"X (forwards/backwards): {x}")
+                print(f"Y (right/left): {y}")
+                print(f"Z (down/up): {z}")
+                roll, pitch, yaw = get_rotation_degrees(global_pose)
+                print(f"Roll: {roll}")
+                print(f"Pitch: {pitch}")
+                print(f"Yaw: {yaw}")
+
+    finally:
+        camera_thread.running = False
+        prepare_frame_thread.running = False
+        compute_thread.running = False
+        camera_thread.join()
+        prepare_frame_thread.join()
+        compute_thread.join()
+
+
+if __name__ == "__main__":
+    main()
