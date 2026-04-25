@@ -1,2 +1,1 @@
-- Figure out how to optimize frame cache calculation (prepareFrameCache) - currently at 22ms
-- Once that's done try to increase detection rate/tracking accuracy
+- Implement frame skipping

@@ -40,6 +40,8 @@ class TofCamera:
             return
 
         self.cam.setControl(ac.Control.RANGE, self.range)
+        self.cam.setControl(ac.Control.FMT_WIDTH, 120)
+        self.cam.setControl(ac.Control.FMT_HEIGHT, 90)
         self.cam.setControl(ac.Control.AUTO_FRAME_RATE, 0)
 
         info = self.cam.getCameraInfo()
@@ -48,8 +50,8 @@ class TofCamera:
         print(f"Device type: {info.device_type}")
 
         self.range = self.cam.getControl(ac.Control.RANGE)
-        self.fmt_height = self.cam.getControl(ac.Control.FMT_WIDTH)
-        self.fmt_width = self.cam.getControl(ac.Control.FMT_HEIGHT)
+        self.fmt_height = self.cam.getControl(ac.Control.FMT_HEIGHT)
+        self.fmt_width = self.cam.getControl(ac.Control.FMT_WIDTH)
         self.mode = self.cam.getControl(ac.Control.MODE)
         self.frame_mode = self.cam.getControl(ac.Control.FRAME_MODE)
         self.exposure = self.cam.getControl(ac.Control.EXPOSURE)
