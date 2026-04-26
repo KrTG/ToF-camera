@@ -178,6 +178,16 @@ class TofCamera:
         mask = (confidence >= conf.ICPO_CONFIDENCE).astype(np.uint8) * 255
         return mask
 
+    def get_frame_rgbd(self, frame: ac.DepthData):
+        _start_time = time.monotonic_ns()
+
+        amplitude = self._get_frame_amplitude(frame)
+        depth = self._get_frame_depth(frame)
+        mask = self._get_frame_mask(frame)
+
+        return amplitude, depth, mask, time.monotonic_ns() - _start_time
+
+
     def get_depth_rgb(self):
         if not self.started or not self.cam or not self.range:
             print("Camera not initalized.")
@@ -218,24 +228,20 @@ class TofCamera:
             return result
 
     def get_rgbd(self):
-        _start_time = time.monotonic_ns()
-
         if not self.started or not self.cam or not self.range:
             print("Camera not initalized.")
             return (None, None, None, 0)
 
         frame = self.get_frame_raw()
         if frame is not None:
-            depth = self._get_frame_depth(frame)
-            amplitude = self._get_frame_amplitude(frame)
-            mask = self._get_frame_mask(frame)
+            depth, amplitude, mask, _time = self.get_frame_rgbd(frame)
             self.cam.releaseFrame(frame)
-            return amplitude, depth, mask, time.monotonic_ns() - _start_time
+            return amplitude, depth, mask, _time
 
         return (None, None, None, 0)
 
 
-cam = TofCamera(scale=0.5)
+cam = TofCamera()
 camera_lock = threading.Lock()
 frame = None
 

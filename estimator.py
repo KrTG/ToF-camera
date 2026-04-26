@@ -1,6 +1,7 @@
 import math
 import os
 from threading import Condition, Thread
+import time
 from typing import Optional, Tuple
 
 from src.icpo import IcpOdometry
@@ -40,28 +41,31 @@ class CameraThread(PipelineThread):
         self.running = True
         try:
             while self.running:
-                frame = self.camera.get_rgbd()
-                if frame is None:
-                    print("Camera: camera timed out.")
-                    self.running = False
-                    break
+                frame = self.camera.get_frame_raw()
 
-                amplitude, depth, mask, _time = frame
-                frame = (amplitude, depth, mask, {"camera": _time})
+                if frame is None:
+                    time.sleep(0.0001)
+                    continue
 
                 self.frame_counter += 1
+                if self.frame_counter % self.divisor != 0:
+                    self.camera.release_frame_raw(frame)
+                    continue
 
-                if self.frame_counter % self.divisor == 0:
-                    # We should process this frame
-                    with self.condition:
-                        if self.frame is not None:
-                            print(
-                                "Camera: Next frame ready, while previous was not acquired!"
-                            )
-                            self.running = False
-                            break
-                        self.frame = frame
-                        self.condition.notify()
+                amplitude, depth, mask, _time = self.camera.get_frame_rgbd(frame)
+                self.camera.release_frame_raw(frame)
+                frame = (amplitude, depth, mask, {"camera": _time})
+
+                # We should process this frame
+                with self.condition:
+                    if self.frame is not None:
+                        print(
+                            "Camera: Next frame ready, while previous was not acquired!"
+                        )
+                        self.running = False
+                        break
+                    self.frame = frame
+                    self.condition.notify()
         finally:
             with self.condition:
                 self.running = False
@@ -173,7 +177,7 @@ def get_rotation_degrees(pose):
 def main():
     SCALE = 1
     FPS_DIVISOR = 3
-    camera = TofCamera(scale=SCALE, frame_timeout=6000)
+    camera = TofCamera(scale=SCALE, frame_timeout=0)
     camera.start()
     odometry = IcpOdometry(camera.get_intrinsic_matrix())
     camera_thread = CameraThread(camera, FPS_DIVISOR)
