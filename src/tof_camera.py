@@ -13,7 +13,7 @@ WHITE = (255, 255, 255)
 
 
 class TofCamera:
-    def __init__(self, range=conf.RANGE, frame_timeout=200, scale=1.0):
+    def __init__(self, range=conf.RANGE, frame_timeout=200, scale=1):
         self.cam = None
         self.range = range
         self.frame_timeout = frame_timeout
@@ -201,6 +201,8 @@ class TofCamera:
                 np.uint8
             )
             result = cv2.applyColorMap(result, cv2.COLORMAP_RAINBOW)
+            mask = self._get_frame_mask(frame)
+            result[mask == 0] = 0
 
             self.cam.releaseFrame(frame)
             return result
@@ -213,33 +215,10 @@ class TofCamera:
         frame = self.get_frame_raw()
         if frame is not None:
             result = self._get_frame_amplitude(frame)
+            mask = self._get_frame_mask(frame)
+            result[mask == 0] = 0
             self.cam.releaseFrame(frame)
             return result
-
-    def get_mask_grayscale(self):
-        if not self.started or not self.cam or not self.range:
-            print("Camera not initalized.")
-            return
-
-        frame = self.get_frame_raw()
-        if frame is not None:
-            result = self._get_frame_mask(frame)
-            self.cam.releaseFrame(frame)
-            return result
-
-    def get_rgbd(self):
-        if not self.started or not self.cam or not self.range:
-            print("Camera not initalized.")
-            return (None, None, None, 0)
-
-        frame = self.get_frame_raw()
-        if frame is not None:
-            depth, amplitude, mask, _time = self.get_frame_rgbd(frame)
-            self.cam.releaseFrame(frame)
-            return amplitude, depth, mask, _time
-
-        return (None, None, None, 0)
-
 
 cam = TofCamera()
 camera_lock = threading.Lock()
@@ -261,9 +240,6 @@ def stream_frames(image="amplitude"):
             im = cam.get_amplitude_grayscale()
         elif image == "depth":
             im = cam.get_depth_rgb()
-        elif image == "mask":
-            im = cam.get_mask_grayscale()
-
         if im is not None:
             imgencode = cv2.imencode(".jpg", im)[1]
             stringData = imgencode.tobytes()

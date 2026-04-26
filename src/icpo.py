@@ -16,7 +16,7 @@ class IcpOdometry:
         max_depth_diff=conf.ICPO_MAX_DEPTH_DIFF,
         max_points_part=conf.ICPO_MAX_POINTS_PART,
         iter_counts=conf.ICPO_ITER_COUNTS,
-        gradient_magnitudes=conf.ICPO_GRADIENT_MAGNITUDES
+        gradient_magnitudes=conf.ICPO_GRADIENT_MAGNITUDES,
     ):
         self.icpo = cv2.rgbd.RgbdICPOdometry.create(
             cameraMatrix=cam_matrix,
@@ -26,7 +26,7 @@ class IcpOdometry:
             maxPointsPart=max_points_part,
             iterCounts=iter_counts,
             minGradientMagnitudes=gradient_magnitudes,
-            transformType=4 # Default
+            transformType=4,  # Default
         )
         print("----ICPO SETTINGS----")
         print(f"Camera matrix: {self.icpo.getCameraMatrix()}")
@@ -64,9 +64,7 @@ class IcpOdometry:
                 init_rt = np.linalg.matrix_power(init_rt, self.skipped_frames + 1)
 
             success, transform = self.icpo.compute2(
-                self.anchor_odometry_frame,
-                odometry_frame,
-                initRt=init_rt
+                self.anchor_odometry_frame, odometry_frame, initRt=init_rt
             )
             if success:
                 self.global_pose @= transform
@@ -82,7 +80,9 @@ class IcpOdometry:
                 print(f"Skipped frames: {self.skipped_frames}")
                 if self.skipped_frames > 2:
                     print("Lost tracking. Re-set using linear prediction.")
-                    jump = np.linalg.matrix_power(self.previous_transform, self.skipped_frames + 1)
+                    jump = np.linalg.matrix_power(
+                        self.previous_transform, self.skipped_frames + 1
+                    )
                     self.global_pose @= jump
                     self.anchor_odometry_frame = odometry_frame
                     self.skipped_frames = 0
@@ -92,19 +92,15 @@ class IcpOdometry:
 
         return self.global_pose, time.monotonic_ns() - _start_time
 
-
     def next_frame(self, amplitude, depth, mask, frame_id):
         _start_time = time.monotonic_ns()
-        current_odometry_frame, _prep_time = self.prepare_frame(amplitude, depth, mask, frame_id)
+        current_odometry_frame, _prep_time = self.prepare_frame(
+            amplitude, depth, mask, frame_id
+        )
         pose, _compute_time = self.compute_frame(current_odometry_frame)
         _total_time = time.monotonic_ns() - _start_time
 
-        return (
-            pose,
-            _total_time,
-            _prep_time,
-            _compute_time
-        )
+        return (pose, _total_time, _prep_time, _compute_time)
 
     def reset_position(self):
         self.global_pose = np.eye(4, dtype=np.float64)

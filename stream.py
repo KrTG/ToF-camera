@@ -18,11 +18,6 @@ def vid1():
     return Response(
         stream_frames("depth"), mimetype="multipart/x-mixed-replace; boundary=frame"
     )
-@app.route("/vid2")
-def vid2():
-    return Response(
-        stream_frames("mask"), mimetype="multipart/x-mixed-replace; boundary=frame"
-    )
 
 @app.route("/")
 def index():
