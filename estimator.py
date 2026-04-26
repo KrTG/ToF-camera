@@ -1,11 +1,13 @@
 import math
 import os
-from threading import Condition, Thread
 import time
+from threading import Condition, Thread
 from typing import Optional, Tuple
 
+from src import conf
 from src.icpo import IcpOdometry
 from src.tof_camera import TofCamera
+
 
 class PipelineThread(Thread):
     def __init__(self):
@@ -30,7 +32,7 @@ class PipelineThread(Thread):
 
 
 class CameraThread(PipelineThread):
-    def __init__(self, camera: TofCamera, framerate_divisor: int = 1):
+    def __init__(self, camera: TofCamera, framerate_divisor: int = conf.FRAME_DIV):
         super().__init__()
         self.camera = camera
         self.divisor = framerate_divisor
@@ -70,7 +72,6 @@ class CameraThread(PipelineThread):
             with self.condition:
                 self.running = False
                 self.condition.notify_all()
-
 
 
 class PrepareFrameThread(PipelineThread):
@@ -175,12 +176,10 @@ def get_rotation_degrees(pose):
 
 
 def main():
-    SCALE = 1
-    FPS_DIVISOR = 3
-    camera = TofCamera(scale=SCALE, frame_timeout=0)
+    camera = TofCamera(frame_timeout=0)
     camera.start()
     odometry = IcpOdometry(camera.get_intrinsic_matrix())
-    camera_thread = CameraThread(camera, FPS_DIVISOR)
+    camera_thread = CameraThread(camera)
     prepare_frame_thread = PrepareFrameThread(camera_thread, odometry)
     compute_thread = ComputeThread(prepare_frame_thread, odometry)
 
@@ -198,7 +197,7 @@ def main():
             compute_time = times["compute"]
 
             if (frame_id + 1) % 50 == 0:
-                print(f"Time budget: {33 * FPS_DIVISOR} ms")
+                print(f"Time budget: {33 * conf.FRAME_DIV} ms")
                 print(f"Pre-processing time: {prep_time / 1000000} ms")
                 print(f"Prepare frame time: {cache_time / 1000000} ms")
                 print(f"Compute odometry time: {compute_time / 1000000} ms")

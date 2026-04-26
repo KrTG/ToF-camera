@@ -145,7 +145,7 @@ class TofCamera:
         """
         Returns normalized amplitude data
         """
-        alpha = 0.08  # TODO: Implement adaptive alpha to adjust for lightning conditions
+        alpha = 0.12  # TODO: Implement adaptive alpha to adjust for lightning conditions
 
         amplitude = frame.amplitude_data
         if self.scale != 1:
@@ -158,7 +158,7 @@ class TofCamera:
                 interpolation=cv2.INTER_AREA,
         )
         amplitude = cv2.convertScaleAbs(amplitude, alpha=alpha)
-        amplitude = self.clahe.apply(amplitude)
+        #amplitude = self.clahe.apply(amplitude)
         return amplitude
 
     def _get_frame_mask(self, frame: ac.DepthData):
