@@ -75,7 +75,7 @@ class CameraThread(PipelineThread):
 
 
 class PrepareFrameThread(PipelineThread):
-    def __init__(self, camera_thread: CameraThread, odometry: IcpOdometry):
+    def __init__(self, camera_thread: PipelineThread, odometry: IcpOdometry):
         super().__init__()
         self.camera_thread = camera_thread
         self.odometry = odometry
@@ -117,7 +117,7 @@ class PrepareFrameThread(PipelineThread):
 
 
 class ComputeThread(PipelineThread):
-    def __init__(self, prepare_frame_thread: PrepareFrameThread, odometry: IcpOdometry):
+    def __init__(self, prepare_frame_thread: PipelineThread, odometry: IcpOdometry):
         super().__init__()
         self.prepare_thread = prepare_frame_thread
         self.odometry = odometry
