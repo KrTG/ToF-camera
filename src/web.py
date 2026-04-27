@@ -1,94 +1,130 @@
+import json
 import threading
 import time
+from multiprocessing.spawn import prepare
+from typing import Optional, Tuple
 
 import cv2
 
-from estimator import CameraThread, PipelineThread
+from estimator import (CameraThread, ComputeThread, PipelineThread,
+                       PrepareFrameThread, get_rotation_degrees,
+                       get_translation)
+from src import conf
+from src.icpo import IcpOdometry
 from src.tof_camera import TofCamera
-
-frame_lock = threading.Lock()
-global_amplitude = None
-global_depth = None
 
 
 class FrameSaverThread(PipelineThread):
-    def __init__(
-        self, camera_thread: PipelineThread, camera: TofCamera, passthrough=False
-    ):
+    def __init__(self, camera_thread: CameraThread, camera: TofCamera):
         super().__init__()
         self.camera_thread = camera_thread
         self.camera = camera
-        self.passthrough = passthrough
+        self.cached_frame = None
 
     def run(self):
-        global global_amplitude
-        global global_depth
-
         self.running = True
         try:
             while self.running:
                 frame = self.camera_thread.get_frame()
                 if frame is None:
-                    self.running = False
-                    break
+                    continue
 
                 # Save the frame globally
                 amplitude, depth, mask, _ = frame
                 amplitude = self.camera.convert_grayscale(amplitude, mask)
                 depth = self.camera.convert_rgb(depth, mask)
 
-                with frame_lock:
-                    global_amplitude = amplitude
-                    global_depth = depth
-
-                if self.passthrough:
-                    with self.condition:
-                        if self.frame is not None:
-                            print(
-                                "Compute: Next frame ready, while previous was not acquired!"
-                            )
-                            self.running = False
-                            break
-                        self.frame = frame
-                        self.condition.notify()
-        finally:
-            if self.passthrough:
                 with self.condition:
+                    self.cached_frame = amplitude, depth
+        finally:
+            pass
+
+    def get_frame(self) -> Optional[Tuple]:
+        with self.condition:
+            return self.cached_frame
+
+
+class OdometrySaverThread(PipelineThread):
+    def __init__(self, compute_thread: PipelineThread):
+        super().__init__()
+        self.compute_thread = compute_thread
+
+        self.cached_frame = None
+
+    def run(self):
+        self.running = True
+        try:
+            while self.running:
+                frame = self.compute_thread.wait_frame()
+                if frame is None:
                     self.running = False
-                    self.condition.notify_all()
+                    break
+
+                pose, frame_id, times = frame
+
+                if frame_id % 20 == 0:
+                    x, y, z = get_translation(pose)
+                    roll, pitch, yaw = get_rotation_degrees(pose)
+                    frame = {
+                        "time_budget": conf.FRAME_DIV * 33,
+                        "prep_time": times["camera"] / 1000000,
+                        "cache_time": times["cache"] / 1000000,
+                        "compute_time": times["compute"] / 1000000,
+                        "x": x,
+                        "y": y,
+                        "z": z,
+                        "roll": roll,
+                        "pitch": pitch,
+                        "yaw": yaw,
+                    }
+
+                    with self.condition:
+                        self.cached_frame = frame
+        finally:
+            pass
+
+    def get_frame(self) -> Optional[dict]:
+        with self.condition:
+            return self.cached_frame
 
 
-cam_thread = None
+camera = None
+camera_thread = None
 frame_saver_thread = None
+prepare_frame_thread = None
+compute_thread = None
+odometry_saver_thread = None
 camera_lock = threading.Lock()
 
 
 def stream_frames(image="amplitude"):
-    global frame_lock
-    global global_amplitude
-    global global_depth
-
     global camera_lock
-    global cam_thread
+    global camera
+    global camera_thread
     global frame_saver_thread
 
     print("Streaming video")
 
     with camera_lock:
-        if cam_thread is None:
+        if camera is None or camera_thread is None:
             camera = TofCamera(frame_timeout=0)
-            cam_thread = CameraThread(camera)
-            frame_saver_thread = FrameSaverThread(cam_thread, camera)
+            camera_thread = CameraThread(camera)
             camera.start()
-            cam_thread.start()
+            camera_thread.start()
+
+        if frame_saver_thread is None:
+            frame_saver_thread = FrameSaverThread(camera_thread, camera)
             frame_saver_thread.start()
 
     while True:
-        with frame_lock:
-            if image == "amplitude":
-                im = global_amplitude
-            elif image == "depth":
-                im = global_depth
+        frame = frame_saver_thread.get_frame()
+        if frame is None:
+            continue
+        amplitude, depth = frame
+        if image == "amplitude":
+            im = amplitude
+        elif image == "depth":
+            im = depth
         if im is not None:
             imgencode = cv2.imencode(".jpg", im)[1]
             stringData = imgencode.tobytes()
@@ -98,3 +134,39 @@ def stream_frames(image="amplitude"):
             )
             yield output
             time.sleep(0.01)
+
+
+def stream_odometry():
+    global camera_lock
+    global camera
+    global camera_thread
+    global prepare_frame_thread
+    global compute_thread
+    global odometry_saver_thread
+
+    print("Streaming odometry")
+
+    with camera_lock:
+        if camera is None or camera_thread is None:
+            camera = TofCamera(frame_timeout=0)
+            camera_thread = CameraThread(camera)
+            camera.start()
+            camera_thread.start()
+
+        if prepare_frame_thread is None or compute_thread is None or odometry_saver_thread is None:
+            odometry = IcpOdometry(camera.get_intrinsic_matrix())
+            prepare_frame_thread = PrepareFrameThread(camera_thread, odometry)
+            compute_thread = ComputeThread(prepare_frame_thread, odometry)
+            odometry_saver_thread = OdometrySaverThread(compute_thread)
+
+            prepare_frame_thread.start()
+            compute_thread.start()
+            odometry_saver_thread.start()
+
+    while True:
+        frame = odometry_saver_thread.get_frame()
+        if frame is None:
+            continue
+        yield f"data: {json.dumps(frame)}\n\n"
+
+        time.sleep(0.01)

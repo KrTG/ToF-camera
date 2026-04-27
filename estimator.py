@@ -16,13 +16,15 @@ class PipelineThread(Thread):
         self.running = False
         self.condition = Condition()
         self.frame = None
+        self.pipeline_active = False
 
-    def get_frame(self) -> Optional[Tuple]:
+    def wait_frame(self) -> Optional[Tuple]:
         with self.condition:
             while self.frame is None and self.running:
                 self.condition.wait()
             acquired_frame = self.frame
             self.frame = None
+            self.pipeline_active = True
             return acquired_frame
 
     def stop(self):
@@ -38,6 +40,7 @@ class CameraThread(PipelineThread):
         self.divisor = framerate_divisor
 
         self.frame_counter = 0
+        self.cached_frame = None
 
     def run(self):
         self.running = True
@@ -60,18 +63,24 @@ class CameraThread(PipelineThread):
 
                 # We should process this frame
                 with self.condition:
-                    if self.frame is not None:
-                        print(
-                            "Camera: Next frame ready, while previous was not acquired!"
-                        )
-                        self.running = False
-                        break
+                    if self.pipeline_active:
+                        if self.frame is not None:
+                            print(
+                                "Camera: Next frame ready, while previous was not acquired!"
+                            )
+                            self.running = False
+                            break
                     self.frame = frame
+                    self.cached_frame = frame
                     self.condition.notify()
         finally:
             with self.condition:
                 self.running = False
                 self.condition.notify_all()
+
+    def get_frame(self) -> Optional[Tuple]:
+        with self.condition:
+            return self.cached_frame
 
 
 class PrepareFrameThread(PipelineThread):
@@ -86,7 +95,7 @@ class PrepareFrameThread(PipelineThread):
         self.running = True
         try:
             while self.running:
-                frame = self.camera_thread.get_frame()
+                frame = self.camera_thread.wait_frame()
                 if frame is None:
                     self.running = False
                     break
@@ -128,7 +137,7 @@ class ComputeThread(PipelineThread):
         self.running = True
         try:
             while self.running:
-                frame = self.prepare_thread.get_frame()
+                frame = self.prepare_thread.wait_frame()
                 if frame is None:
                     self.running = False
                     break
@@ -188,7 +197,7 @@ def main():
     compute_thread.start()
     try:
         while True:
-            frame = compute_thread.get_frame()
+            frame = compute_thread.wait_frame()
             if frame is None:
                 break
             global_pose, frame_id, times = frame

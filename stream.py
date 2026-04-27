@@ -1,6 +1,6 @@
 from flask import Flask, render_template, Response
 
-from src.web import stream_frames
+from src.web import stream_frames, stream_odometry
 
 PORT = 5000
 
@@ -13,6 +13,10 @@ def index():
 @app.route("/odometry")
 def odometry():
     return render_template("odometry.html")
+
+@app.route("/odometry_stream")
+def odometry_stream():
+    return Response(stream_odometry(), mimetype='text/event-stream')
 
 @app.route("/video")
 def video():
@@ -29,6 +33,8 @@ def depth_video():
     return Response(
         stream_frames("depth"), mimetype="multipart/x-mixed-replace; boundary=frame"
     )
+
+
 
 
 if __name__ == "__main__":

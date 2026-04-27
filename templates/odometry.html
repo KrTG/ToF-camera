@@ -28,4 +28,30 @@
     </div>
 </body>
 
+
+<script>
+    // Ensure 'source' is defined (e.g., your EventSource URL)
+    const source = new EventSource("{{ url_for('odometry_stream') }}");
+
+    source.onmessage = function (event) {
+        const data = JSON.parse(event.data);
+
+        // Performance Data (usually whole numbers, but can be formatted)
+        document.getElementById("val-time-budget").innerText = data.time_budget.toFixed(0);
+        document.getElementById("val-prep-time").innerText = data.prep_time.toFixed(0);
+        document.getElementById("val-cache-time").innerText = data.cache_time.toFixed(0);
+        document.getElementById("val-compute-time").innerText = data.compute_time.toFixed(0);
+
+        // Translation
+        document.getElementById("val-x").innerText = data.x.toFixed(2);
+        document.getElementById("val-y").innerText = data.y.toFixed(2);
+        document.getElementById("val-z").innerText = data.z.toFixed(2);
+
+        // Rotation
+        document.getElementById("val-roll").innerText = data.roll.toFixed(1);
+        document.getElementById("val-pitch").innerText = data.pitch.toFixed(1);
+        document.getElementById("val-yaw").innerText = data.yaw.toFixed(1);
+    };
+</script>
+
 </html>
