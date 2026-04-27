@@ -124,7 +124,7 @@ class TofCamera:
             return
         self.cam.releaseFrame(frame)
 
-    def _get_frame_depth(self, frame: ac.DepthData):
+    def get_frame_depth(self, frame: ac.DepthData):
         """
         Returns depth data in meters as float32
         """
@@ -141,7 +141,7 @@ class TofCamera:
         depth = depth.astype(np.float32) / 1000.0
         return depth
 
-    def _get_frame_amplitude(self, frame: ac.DepthData):
+    def get_frame_amplitude(self, frame: ac.DepthData):
         """
         Returns normalized amplitude data
         """
@@ -161,7 +161,7 @@ class TofCamera:
         #amplitude = self.clahe.apply(amplitude)
         return amplitude
 
-    def _get_frame_mask(self, frame: ac.DepthData):
+    def get_frame_mask(self, frame: ac.DepthData):
         """
         Returns a mask based on a confidence level
         """
@@ -181,73 +181,26 @@ class TofCamera:
     def get_frame_rgbd(self, frame: ac.DepthData):
         _start_time = time.monotonic_ns()
 
-        amplitude = self._get_frame_amplitude(frame)
-        depth = self._get_frame_depth(frame)
-        mask = self._get_frame_mask(frame)
+        amplitude = self.get_frame_amplitude(frame)
+        depth = self.get_frame_depth(frame)
+        mask = self.get_frame_mask(frame)
 
         return amplitude, depth, mask, time.monotonic_ns() - _start_time
 
+    def get_frame_depth_rgb(self, frame: ac.DepthData):
+        result = self.get_frame_depth(frame)
 
-    def get_depth_rgb(self):
-        if not self.started or not self.cam or not self.range:
-            print("Camera not initalized.")
-            return
+        result = np.clip(result * (255.0 / self.range * 1000), 0, 255).astype(
+            np.uint8
+        )
+        result = cv2.applyColorMap(result, cv2.COLORMAP_RAINBOW)
+        mask = self.get_frame_mask(frame)
+        result[mask == 0] = 0
 
-        frame = self.get_frame_raw()
-        if frame is not None:
-            result = self._get_frame_depth(frame)
+        return result
 
-            result = np.clip(result * (255.0 / self.range * 1000), 0, 255).astype(
-                np.uint8
-            )
-            result = cv2.applyColorMap(result, cv2.COLORMAP_RAINBOW)
-            mask = self._get_frame_mask(frame)
-            result[mask == 0] = 0
-
-            self.cam.releaseFrame(frame)
-            return result
-
-    def get_amplitude_grayscale(self):
-        if not self.started or not self.cam or not self.range:
-            print("Camera not initalized.")
-            return
-
-        frame = self.get_frame_raw()
-        if frame is not None:
-            result = self._get_frame_amplitude(frame)
-            mask = self._get_frame_mask(frame)
-            result[mask == 0] = 0
-            self.cam.releaseFrame(frame)
-            return result
-
-cam = TofCamera()
-camera_lock = threading.Lock()
-frame = None
-
-
-def stream_frames(image="amplitude"):
-    print("Streaming video")
-    global cam
-    global frame
-
-    with camera_lock:
-        if not cam.started:
-            cam.start()
-
-    while True:
-        im = None
-        if image == "amplitude":
-            im = cam.get_amplitude_grayscale()
-        elif image == "depth":
-            im = cam.get_depth_rgb()
-        if im is not None:
-            imgencode = cv2.imencode(".jpg", im)[1]
-            stringData = imgencode.tobytes()
-            output = (
-                b"--frame\r\n"
-                b"Content-Type: text/plain\r\n\r\n" + stringData + b"\r\n"
-            )
-            frame = output
-        if frame is not None:
-            yield frame
-            time.sleep(0.033)
+    def get_frame_amplitude_grayscale(self, frame: ac.DepthData):
+        result = self.get_frame_amplitude(frame)
+        mask = self.get_frame_mask(frame)
+        result[mask == 0] = 0
+        return result
