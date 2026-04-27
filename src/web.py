@@ -26,8 +26,9 @@ def stream_frames(image="amplitude"):
         with frame_lock:
             raw_frame = cam.get_frame_raw()
             if raw_frame is not None:
-                amplitude = cam.get_frame_amplitude_grayscale(raw_frame)
-                depth = cam.get_frame_depth_rgb(raw_frame)
+                amplitude, depth, mask, _time = cam.get_frame_rgbd(raw_frame)
+                amplitude = cam.convert_grayscale(amplitude, mask)
+                depth = cam.convert_rgb(depth, mask)
             cam.release_frame_raw(raw_frame)
 
         if image == "amplitude":

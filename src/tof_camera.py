@@ -187,20 +187,16 @@ class TofCamera:
 
         return amplitude, depth, mask, time.monotonic_ns() - _start_time
 
-    def get_frame_depth_rgb(self, frame: ac.DepthData):
-        result = self.get_frame_depth(frame)
-
-        result = np.clip(result * (255.0 / self.range * 1000), 0, 255).astype(
+    def convert_rgb(self, frame: np.ndarray, mask: np.ndarray):
+        result = np.clip(frame * (255.0 / self.range * 1000), 0, 255).astype(
             np.uint8
         )
         result = cv2.applyColorMap(result, cv2.COLORMAP_RAINBOW)
-        mask = self.get_frame_mask(frame)
         result[mask == 0] = 0
 
         return result
 
-    def get_frame_amplitude_grayscale(self, frame: ac.DepthData):
-        result = self.get_frame_amplitude(frame)
-        mask = self.get_frame_mask(frame)
+    def convert_grayscale(self, frame: np.ndarray, mask: np.ndarray):
+        result = frame[:]
         result[mask == 0] = 0
-        return result
+        return frame
