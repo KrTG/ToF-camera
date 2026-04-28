@@ -1,18 +1,11 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Kamera ToF - menu</title>
-  </head>
-  <body>
-    <h1>Kamera ToF - Menu Główne</h1>
+{% extends "base.html" %}
 
-    <div class="menu-container">
-      <div><a href="{{ url_for('video') }}" class="btn">Podgląd obrazu z kamery</a></div>
-      <div><a href="{{ url_for('odometry') }}" class="btn">Odometria</a></div>
-    </div>
+{% block title %}Kamera ToF - menu{% endblock %}
 
-  </body>
-</html>
+{% block content %}
+<form action="{{ url_for('shutdown_system') }}" method="POST">
+    <button class="big_button" type="submit">
+        Shutdown the system
+    </button>
+</form>
+{% endblock %}

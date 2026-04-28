@@ -1,4 +1,7 @@
-from flask import Flask, render_template, Response
+import os
+import subprocess
+
+from flask import Flask, make_response, render_template, Response
 
 from src.web import stream_frames, stream_odometry
 
@@ -14,9 +17,15 @@ def index():
 def odometry():
     return render_template("odometry.html")
 
-@app.route("/odometry_stream")
+@app.get("/odometry_stream")
 def odometry_stream():
     return Response(stream_odometry(), mimetype='text/event-stream')
+
+@app.post("/odometry_reset")
+def reset_odometry():
+    with open("/tmp/reset", "w"):
+        pass
+    return make_response()
 
 @app.route("/video")
 def video():
@@ -34,7 +43,13 @@ def depth_video():
         stream_frames("depth"), mimetype="multipart/x-mixed-replace; boundary=frame"
     )
 
-
+@app.post("/shutdown")
+def shutdown_system():
+    try:
+        subprocess.run(['sudo', '-n', 'shutdown', '-h', 'now'], check=True)
+        return make_response("Shutting down...", 200)
+    except Exception as e:
+        return make_response(str(e), 500)
 
 
 if __name__ == "__main__":

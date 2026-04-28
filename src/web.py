@@ -62,7 +62,7 @@ class OdometrySaverThread(PipelineThread):
 
                 pose, frame_id, times = frame
 
-                if frame_id % 20 == 0:
+                if frame_id % 1 == 0:
                     x, y, z = get_translation(pose)
                     roll, pitch, yaw = get_rotation_degrees(pose)
                     frame = {

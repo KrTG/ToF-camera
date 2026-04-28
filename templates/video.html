@@ -1,13 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Python video streaming</title>
-  </head>
-  <body>
-    <img src="{{ url_for('amplitude_video', _external=True) }}">
-    <img src="{{ url_for('depth_video', _external=True) }}">
-  </body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}Kamera ToF - podgląd video{% endblock %}
+
+{% block content %}
+<img src="{{ url_for('amplitude_video', _external=True) }}">
+<img src="{{ url_for('depth_video', _external=True) }}">
+{% endblock %}
