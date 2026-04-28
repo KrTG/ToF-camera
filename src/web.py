@@ -115,11 +115,13 @@ odometry_saver_thread = None
 camera_lock = threading.Lock()
 
 
+stream_counter = 0
 def stream_frames(image="amplitude"):
     global camera_lock
     global camera
     global camera_thread
     global frame_saver_thread
+    global stream_counter
 
     print("Streaming video")
 
@@ -134,27 +136,40 @@ def stream_frames(image="amplitude"):
             frame_saver_thread = FrameSaverThread(camera_thread, camera)
             frame_saver_thread.start()
 
+        stream_counter += 1
 
-    while True:
-        frame = frame_saver_thread.get_frame()
-        if frame is None:
-            continue
-        amplitude, depth = frame
-        if image == "amplitude":
-            im = amplitude
-        elif image == "depth":
-            im = depth
-        if im is not None:
-            imgencode = cv2.imencode(".jpg", im)[1]
-            stringData = imgencode.tobytes()
-            output = (
-                b"--frame\r\n"
-                b"Content-Type: text/plain\r\n\r\n" + stringData + b"\r\n"
-            )
-            yield output
-            time.sleep(0.01)
+    try:
+        while True:
+            frame = frame_saver_thread.get_frame()
+            if frame is None:
+                continue
+            amplitude, depth = frame
+            if image == "amplitude":
+                im = amplitude
+            elif image == "depth":
+                im = depth
+            if im is not None:
+                imgencode = cv2.imencode(".jpg", im)[1]
+                stringData = imgencode.tobytes()
+                output = (
+                    b"--frame\r\n"
+                    b"Content-Type: text/plain\r\n\r\n" + stringData + b"\r\n"
+                )
+                yield output
+                time.sleep(0.01)
+    finally:
+        stream_counter -= 1
+
+        if stream_counter == 0:
+            print("Video preview quit.")
+            with camera_lock:
+                camera_thread.pipeline_active = False
+                frame_saver_thread.stop()
+                frame_saver_thread.join()
+                frame_saver_thread.pipeline_active = False
 
 
+odometry_counter = 0
 def stream_odometry():
     global camera_lock
     global camera
@@ -162,6 +177,7 @@ def stream_odometry():
     global prepare_frame_thread
     global compute_thread
     global odometry_saver_thread
+    global odometry_counter
 
     print("Streaming odometry")
 
@@ -182,10 +198,32 @@ def stream_odometry():
             compute_thread.start()
             odometry_saver_thread.start()
 
-    while True:
-        frame = odometry_saver_thread.get_frame()
-        if frame is None:
-            continue
-        yield f"data: {json.dumps(frame)}\n\n"
+        odometry_counter += 1
 
-        time.sleep(0.01)
+    try:
+        while True:
+            frame = odometry_saver_thread.get_frame()
+            if frame is None:
+                continue
+            yield f"data: {json.dumps(frame)}\n\n"
+
+            time.sleep(0.01)
+    finally:
+        odometry_counter -= 1
+
+        if odometry_counter == 0:
+            print("Odometry quit.")
+            with camera_lock:
+                camera_thread.pipeline_active = False
+                prepare_frame_thread.stop()
+                prepare_frame_thread.join()
+                camera_thread.pipeline_active = False
+                compute_thread.stop()
+                compute_thread.join()
+                camera_thread.pipeline_active = False
+                odometry_saver_thread.stop()
+                odometry_saver_thread.join()
+                camera_thread.pipeline_active = False
+                prepare_frame_thread = None
+                compute_thread = None
+                odometry_saver_thread = None
