@@ -163,10 +163,10 @@ def stream_frames(image="amplitude"):
         if stream_counter == 0:
             print("Video preview quit.")
             with camera_lock:
-                camera_thread.pipeline_active = False
                 frame_saver_thread.stop()
                 frame_saver_thread.join()
-                frame_saver_thread.pipeline_active = False
+                frame_saver_thread = None
+
 
 
 odometry_counter = 0
