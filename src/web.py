@@ -1,4 +1,6 @@
+from collections import deque
 import json
+from statistics import mean
 import threading
 import time
 from multiprocessing.spawn import prepare
@@ -50,6 +52,9 @@ class OdometrySaverThread(PipelineThread):
         self.compute_thread = compute_thread
 
         self.cached_frame = None
+        self.prep_times = deque(maxlen=100)
+        self.cache_times = deque(maxlen=100)
+        self.compute_times = deque(maxlen=100)
 
     def run(self):
         self.running = True
@@ -61,6 +66,9 @@ class OdometrySaverThread(PipelineThread):
                     break
 
                 pose, frame_id, times = frame
+                self.prep_times.append(times["camera"])
+                self.cache_times.append(times["cache"])
+                self.compute_times.append(times["compute"])
 
                 if frame_id % 1 == 0:
                     x, y, z = get_translation(pose)
@@ -70,6 +78,15 @@ class OdometrySaverThread(PipelineThread):
                         "prep_time": times["camera"] / 1000000,
                         "cache_time": times["cache"] / 1000000,
                         "compute_time": times["compute"] / 1000000,
+                        "prep_time_min": min(self.prep_times) / 1000000,
+                        "prep_time_max": max(self.prep_times) / 1000000,
+                        "prep_time_avg": mean(self.prep_times) / 1000000,
+                        "cache_time_min": min(self.cache_times) / 1000000,
+                        "cache_time_max": max(self.cache_times) / 1000000,
+                        "cache_time_avg": mean(self.cache_times) / 1000000,
+                        "compute_time_min": min(self.compute_times) / 1000000,
+                        "compute_time_max": max(self.compute_times) / 1000000,
+                        "compute_time_avg": mean(self.compute_times) / 1000000,
                         "x": x,
                         "y": y,
                         "z": z,
@@ -80,6 +97,7 @@ class OdometrySaverThread(PipelineThread):
 
                     with self.condition:
                         self.cached_frame = frame
+
         finally:
             pass
 
@@ -115,6 +133,7 @@ def stream_frames(image="amplitude"):
         if frame_saver_thread is None:
             frame_saver_thread = FrameSaverThread(camera_thread, camera)
             frame_saver_thread.start()
+
 
     while True:
         frame = frame_saver_thread.get_frame()

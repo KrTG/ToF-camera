@@ -4,10 +4,26 @@
 
 {% block content %}
 <h3>Performance Data</h3>
+
 <div>Time budget: <span id="val-time-budget">0</span> ms</div>
-<div>Pre-processing time: <span id="val-prep-time">0</span> ms</div>
-<div>Prepare frame time: <span id="val-cache-time">0</span> ms</div>
-<div>Compute odometry time: <span id="val-compute-time">0</span> ms</div>
+
+<div>Pre-processing time: <span id="val-prep-time">0</span> ms
+    (min: <span id="val-prep-time-min">0</span>,
+     max: <span id="val-prep-time-max">0</span>,
+     avg: <span id="val-prep-time-avg">0</span>)
+</div>
+
+<div>Prepare frame time: <span id="val-cache-time">0</span> ms
+    (min: <span id="val-cache-time-min">0</span>,
+     max: <span id="val-cache-time-max">0</span>,
+     avg: <span id="val-cache-time-avg">0</span>)
+</div>
+
+<div>Compute odometry time: <span id="val-compute-time">0</span> ms
+    (min: <span id="val-compute-time-min">0</span>,
+     max: <span id="val-compute-time-max">0</span>,
+     avg: <span id="val-compute-time-avg">0</span>)
+</div>
 
 <h3>Translation</h3>
 <div>X (forwards/backwards): <span id="val-x">0</span></div>
@@ -28,11 +44,26 @@
     source.onmessage = function (event) {
         const data = JSON.parse(event.data);
 
-        // Performance Data (usually whole numbers, but can be formatted)
+        // Performance Data
         document.getElementById("val-time-budget").innerText = data.time_budget.toFixed(0);
+
+        // Pre-processing metrics
         document.getElementById("val-prep-time").innerText = data.prep_time.toFixed(0);
+        document.getElementById("val-prep-time-min").innerText = data.prep_time_min.toFixed(0);
+        document.getElementById("val-prep-time-max").innerText = data.prep_time_max.toFixed(0);
+        document.getElementById("val-prep-time-avg").innerText = data.prep_time_avg.toFixed(0);
+
+        // Prepare frame (cache) metrics
         document.getElementById("val-cache-time").innerText = data.cache_time.toFixed(0);
+        document.getElementById("val-cache-time-min").innerText = data.cache_time_min.toFixed(0);
+        document.getElementById("val-cache-time-max").innerText = data.cache_time_max.toFixed(0);
+        document.getElementById("val-cache-time-avg").innerText = data.cache_time_avg.toFixed(0);
+
+        // Compute odometry metrics
         document.getElementById("val-compute-time").innerText = data.compute_time.toFixed(0);
+        document.getElementById("val-compute-time-min").innerText = data.compute_time_min.toFixed(0);
+        document.getElementById("val-compute-time-max").innerText = data.compute_time_max.toFixed(0);
+        document.getElementById("val-compute-time-avg").innerText = data.compute_time_avg.toFixed(0);
 
         // Translation
         document.getElementById("val-x").innerText = data.x.toFixed(2);
