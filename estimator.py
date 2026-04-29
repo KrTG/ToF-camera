@@ -40,7 +40,6 @@ class CameraThread(PipelineThread):
         self.divisor = framerate_divisor
 
         self.frame_counter = 0
-        self.cached_frame = None
 
     def run(self):
         self.running = True
@@ -71,16 +70,11 @@ class CameraThread(PipelineThread):
                             self.running = False
                             break
                     self.frame = frame
-                    self.cached_frame = frame
                     self.condition.notify()
         finally:
             with self.condition:
                 self.running = False
                 self.condition.notify_all()
-
-    def get_frame(self) -> Optional[Tuple]:
-        with self.condition:
-            return self.cached_frame
 
 
 class PrepareFrameThread(PipelineThread):

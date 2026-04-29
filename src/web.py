@@ -27,7 +27,7 @@ class FrameSaverThread(PipelineThread):
         self.running = True
         try:
             while self.running:
-                frame = self.camera_thread.get_frame()
+                frame = self.camera_thread.wait_frame()
                 if frame is None:
                     continue
 
@@ -126,6 +126,8 @@ def stream_frames(image="amplitude"):
     print("Streaming video")
 
     with camera_lock:
+        if odometry_counter:
+            return "Cannot run odometry and stream at the same time."
         if camera is None or camera_thread is None:
             camera = TofCamera(frame_timeout=0)
             camera_thread = CameraThread(camera)
@@ -163,9 +165,14 @@ def stream_frames(image="amplitude"):
         if stream_counter == 0:
             print("Video preview quit.")
             with camera_lock:
+                camera_thread.stop()
+                camera_thread.join()
+                camera.stop()
                 frame_saver_thread.stop()
                 frame_saver_thread.join()
                 frame_saver_thread = None
+                camera_thread = None
+                camera = None
 
 
 
@@ -182,6 +189,8 @@ def stream_odometry():
     print("Streaming odometry")
 
     with camera_lock:
+        if stream_counter:
+            return "Cannot run odometry and stream at the same time."
         if camera is None or camera_thread is None:
             camera = TofCamera(frame_timeout=0)
             camera_thread = CameraThread(camera)
@@ -214,16 +223,18 @@ def stream_odometry():
         if odometry_counter == 0:
             print("Odometry quit.")
             with camera_lock:
-                camera_thread.pipeline_active = False
+                camera_thread.stop()
+                camera_thread.join()
+                camera.stop()
                 prepare_frame_thread.stop()
                 prepare_frame_thread.join()
-                camera_thread.pipeline_active = False
                 compute_thread.stop()
                 compute_thread.join()
-                camera_thread.pipeline_active = False
                 odometry_saver_thread.stop()
                 odometry_saver_thread.join()
-                camera_thread.pipeline_active = False
+
+                camera_thread = None
+                camera = None
                 prepare_frame_thread = None
                 compute_thread = None
                 odometry_saver_thread = None
