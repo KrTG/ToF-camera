@@ -8,4 +8,4 @@ ICPO_MAX_DEPTH=2.4  # meters
 ICPO_MAX_DEPTH_DIFF=0.15  # meters
 ICPO_MAX_POINTS_PART=0.17 # percentage
 ICPO_ITER_COUNTS=[1, 7, 7, 21] # Iterations at full res 1/2 res, 1/4 res etc.
-ICPO_GRADIENT_MAGNITUDES=[10, 7, 7, 7] # 1, 1/2, 1/4 etc.
+ICPO_GRADIENT_MAGNITUDES=[7, 5, 5, 5] # 1, 1/2, 1/4 etc.

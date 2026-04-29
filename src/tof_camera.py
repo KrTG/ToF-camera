@@ -145,7 +145,7 @@ class TofCamera:
         """
         Returns normalized amplitude data
         """
-        alpha = 0.12  # TODO: Implement adaptive alpha to adjust for lightning conditions
+        alpha = 0.32  # TODO: Implement adaptive alpha to adjust for lightning conditions
 
         amplitude = frame.amplitude_data
         if self.scale != 1:
