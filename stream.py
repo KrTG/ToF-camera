@@ -1,9 +1,8 @@
-import os
 import subprocess
 
 from flask import Flask, make_response, render_template, Response
 
-from src.web import stream_frames, stream_odometry
+from src.web import streamer
 
 PORT = 5000
 
@@ -19,7 +18,7 @@ def odometry():
 
 @app.get("/odometry_stream")
 def odometry_stream():
-    return Response(stream_odometry(), mimetype='text/event-stream')
+    return Response(streamer.stream_odometry(), mimetype='text/event-stream')
 
 @app.post("/odometry_reset")
 def reset_odometry():
@@ -34,13 +33,13 @@ def video():
 @app.route("/amplitude_video")
 def amplitude_video():
     return Response(
-        stream_frames("amplitude"), mimetype="multipart/x-mixed-replace; boundary=frame"
+        streamer.stream_frames("amplitude"), mimetype="multipart/x-mixed-replace; boundary=frame"
     )
 
 @app.route("/depth_video")
 def depth_video():
     return Response(
-        stream_frames("depth"), mimetype="multipart/x-mixed-replace; boundary=frame"
+        streamer.stream_frames("depth"), mimetype="multipart/x-mixed-replace; boundary=frame"
     )
 
 @app.post("/shutdown")

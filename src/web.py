@@ -4,7 +4,7 @@ from statistics import mean
 import threading
 import time
 from multiprocessing.spawn import prepare
-from typing import Optional, Tuple
+from typing import Generator, Optional, Tuple
 
 import cv2
 
@@ -106,43 +106,91 @@ class OdometrySaverThread(PipelineThread):
             return self.cached_frame
 
 
-camera = None
-camera_thread = None
-frame_saver_thread = None
-prepare_frame_thread = None
-compute_thread = None
-odometry_saver_thread = None
-camera_lock = threading.Lock()
+class Streamer:
+    def __init__(self):
+        self.camera = None
+        self.camera_thread = None
+        self.frame_saver_thread = None
+        self.prepare_frame_thread = None
+        self.compute_thread = None
+        self.odometry_saver_thread = None
+        self.camera_lock = threading.Lock()
+        self.algorithm = None
+
+    def start_video(self):
+        self.camera = TofCamera(frame_timeout=0)
+        self.camera_thread = CameraThread(self.camera)
+        self.camera.start()
+        self.camera_thread.start()
+        self.frame_saver_thread = FrameSaverThread(self.camera_thread, self.camera)
+        self.frame_saver_thread.start()
 
 
-stream_counter = 0
-def stream_frames(image="amplitude"):
-    global camera_lock
-    global camera
-    global camera_thread
-    global frame_saver_thread
-    global stream_counter
+    def cleanup_video(self):
+        if self.camera_thread is not None:
+            self.camera_thread.stop()
+            self.camera_thread.join()
+        if self.camera is not None:
+            self.camera.stop()
+        if self.frame_saver_thread is not None:
+            self.frame_saver_thread.stop()
+            self.frame_saver_thread.join()
+        self.frame_saver_thread = None
+        self.camera_thread = None
+        self.camera = None
 
-    print("Streaming video")
+    def start_odometry(self):
+        self.camera = TofCamera(frame_timeout=0)
+        self.camera_thread = CameraThread(self.camera)
+        self.camera.start()
+        self.camera_thread.start()
+        self.odometry = IcpOdometry(self.camera.get_intrinsic_matrix())
+        self.prepare_frame_thread = PrepareFrameThread(self.camera_thread, self.odometry)
+        self.compute_thread = ComputeThread(self.prepare_frame_thread, self.odometry)
+        self.odometry_saver_thread = OdometrySaverThread(self.compute_thread)
+        self.prepare_frame_thread.start()
+        self.compute_thread.start()
+        self.odometry_saver_thread.start()
 
-    with camera_lock:
-        if odometry_counter:
-            return "Cannot run odometry and stream at the same time."
-        if camera is None or camera_thread is None:
-            camera = TofCamera(frame_timeout=0)
-            camera_thread = CameraThread(camera)
-            camera.start()
-            camera_thread.start()
+    def cleanup_odometry(self):
+        if self.camera_thread is not None:
+            self.camera_thread.stop()
+            self.camera_thread.join()
+        if self.camera is not None:
+            self.camera.stop()
+        if self.prepare_frame_thread is not None:
+            self.prepare_frame_thread.stop()
+            self.prepare_frame_thread.join()
+        if self.compute_thread is not None:
+            self.compute_thread.stop()
+            self.compute_thread.join()
+        if self.odometry_saver_thread is not None:
+            self.odometry_saver_thread.stop()
+            self.odometry_saver_thread.join()
 
-        if frame_saver_thread is None:
-            frame_saver_thread = FrameSaverThread(camera_thread, camera)
-            frame_saver_thread.start()
+        self.camera_thread = None
+        self.camera = None
+        self.prepare_frame_thread = None
+        self.compute_thread = None
+        self.odometry_saver_thread = None
 
-        stream_counter += 1
 
-    try:
+    def stream_frames(self, image="amplitude"):
+        with self.camera_lock:
+            if self.algorithm == "odometry":
+                self.cleanup_odometry()
+                self.algorithm = None
+
+            if self.algorithm is None:
+                self.start_video()
+                self.algorithm = "video"
+
+            print(f"Streaming video")
+
         while True:
-            frame = frame_saver_thread.get_frame()
+            if self.frame_saver_thread is None:
+                return
+            frame = self.frame_saver_thread.get_frame()
             if frame is None:
                 continue
             amplitude, depth = frame
@@ -158,83 +206,27 @@ def stream_frames(image="amplitude"):
                     b"Content-Type: text/plain\r\n\r\n" + stringData + b"\r\n"
                 )
                 yield output
-                time.sleep(0.01)
-    finally:
-        stream_counter -= 1
+                time.sleep(0.1)
 
-        if stream_counter == 0:
-            print("Video preview quit.")
-            with camera_lock:
-                camera_thread.stop()
-                camera_thread.join()
-                camera.stop()
-                frame_saver_thread.stop()
-                frame_saver_thread.join()
-                frame_saver_thread = None
-                camera_thread = None
-                camera = None
+    def stream_odometry(self):
+        with self.camera_lock:
+            if self.algorithm == "video":
+                self.cleanup_video()
+                self.algorithm = None
 
+            if self.algorithm is None:
+                self.start_odometry()
+                self.algorithm = "odometry"
+            print("Streaming odometry")
 
-
-odometry_counter = 0
-def stream_odometry():
-    global camera_lock
-    global camera
-    global camera_thread
-    global prepare_frame_thread
-    global compute_thread
-    global odometry_saver_thread
-    global odometry_counter
-
-    print("Streaming odometry")
-
-    with camera_lock:
-        if stream_counter:
-            return "Cannot run odometry and stream at the same time."
-        if camera is None or camera_thread is None:
-            camera = TofCamera(frame_timeout=0)
-            camera_thread = CameraThread(camera)
-            camera.start()
-            camera_thread.start()
-
-        if prepare_frame_thread is None or compute_thread is None or odometry_saver_thread is None:
-            odometry = IcpOdometry(camera.get_intrinsic_matrix())
-            prepare_frame_thread = PrepareFrameThread(camera_thread, odometry)
-            compute_thread = ComputeThread(prepare_frame_thread, odometry)
-            odometry_saver_thread = OdometrySaverThread(compute_thread)
-
-            prepare_frame_thread.start()
-            compute_thread.start()
-            odometry_saver_thread.start()
-
-        odometry_counter += 1
-
-    try:
         while True:
-            frame = odometry_saver_thread.get_frame()
+            if self.odometry_saver_thread is None:
+                return
+            frame = self.odometry_saver_thread.get_frame()
             if frame is None:
                 continue
             yield f"data: {json.dumps(frame)}\n\n"
 
-            time.sleep(0.01)
-    finally:
-        odometry_counter -= 1
+            time.sleep(0.1)
 
-        if odometry_counter == 0:
-            print("Odometry quit.")
-            with camera_lock:
-                camera_thread.stop()
-                camera_thread.join()
-                camera.stop()
-                prepare_frame_thread.stop()
-                prepare_frame_thread.join()
-                compute_thread.stop()
-                compute_thread.join()
-                odometry_saver_thread.stop()
-                odometry_saver_thread.join()
-
-                camera_thread = None
-                camera = None
-                prepare_frame_thread = None
-                compute_thread = None
-                odometry_saver_thread = None
+streamer = Streamer()
