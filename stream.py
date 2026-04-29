@@ -1,6 +1,6 @@
 import subprocess
 
-from flask import Flask, make_response, render_template, Response
+from flask import Flask, make_response, redirect, render_template, Response, url_for
 
 from src.web import streamer
 
@@ -47,6 +47,14 @@ def shutdown_system():
     try:
         subprocess.run(['sudo', '-n', 'shutdown', '-h', 'now'], check=True)
         return make_response("Shutting down...", 200)
+    except Exception as e:
+        return make_response(str(e), 500)
+
+@app.post("/reload")
+def reload_service():
+    try:
+        subprocess.run(['sudo', 'systemctl', 'restart', 'cam'], check=True)
+        return redirect(url_for("index"))
     except Exception as e:
         return make_response(str(e), 500)
 

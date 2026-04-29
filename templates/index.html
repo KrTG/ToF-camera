@@ -8,4 +8,9 @@
         Shutdown the system
     </button>
 </form>
+<form action="{{ url_for('reload_service') }}" method="POST">
+    <button class="big_button" type="submit">
+        Reload the service
+    </button>
+</form>
 {% endblock %}
