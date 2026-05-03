@@ -151,16 +151,19 @@ if __name__ == "__main__":
         connection = get_connection()
         commander = Commander(connection)
         state = StateMonitor(
-            connection, async_messages=["HEARTBEAT", "SYS_STATUS"], sync_messages=[]
+            connection, async_messages=["HEARTBEAT", "SYS_STATUS"], sync_messages=["ATTITUDE"]
         )
 
+        _time = time.monotonic()
         while True:
             print("Sending heartbeat.")
             commander.send_heartbeat()
-            commander.wait_heartbeat()
             state.update_state()
+            print(f"FPS: {1 / (time.monotonic() - _time):.0f}")
+            _time = time.monotonic()
             print(f"Voltage: {state.voltage / 1000 / 4}")
-            time.sleep(1)
+            print(f"Attitude: r:{state.attitude.roll} p:{state.attitude.roll} y: {state.attitude.yaw}")
+
 
     except ConnectionError:
         print("Connection lost.")
