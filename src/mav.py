@@ -35,7 +35,7 @@ class Commander:
     def send_heartbeat(self):
         if self.connection:
             self.connection.mav.heartbeat_send(
-                mavutil.mavlink.MAV_TYPE_GCS,
+                mavutil.mavlink.MAV_TYPE_ONBOARD,
                 mavutil.mavlink.MAV_AUTOPILOT_INVALID,
                 0,
                 0,
@@ -49,6 +49,7 @@ if __name__ == "__main__":
         commander = Commander(connection)
 
         while True:
+            print("Sending heartbeat.")
             commander.send_heartbeat()
             commander.wait_heartbeat()
             time.sleep(1)
