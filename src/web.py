@@ -3,12 +3,11 @@ import json
 from statistics import mean
 import threading
 import time
-from multiprocessing.spawn import prepare
-from typing import Generator, Optional, Tuple
+from typing import Optional, Tuple
 
 import cv2
 
-from estimator import (CameraThread, ComputeThread, PipelineThread,
+from src.estimator import (CameraThread, ComputeThread, PipelineThread,
                        PrepareFrameThread, get_rotation_degrees,
                        get_translation)
 from src import conf
