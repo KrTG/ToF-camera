@@ -1,4 +1,5 @@
 from collections import deque
+import enum
 import json
 from statistics import mean
 import threading
@@ -14,6 +15,11 @@ from src import conf
 from src.icpo import IcpOdometry
 from src.tof_camera import TofCamera
 
+
+class Algorithm(enum.Enum):
+    NONE = 0
+    ODOMETRY = 1
+    VIDEO = 2
 
 class FrameSaverThread(PipelineThread):
     def __init__(self, camera_thread: CameraThread, camera: TofCamera):
@@ -105,6 +111,31 @@ class OdometrySaverThread(PipelineThread):
             return self.cached_frame
 
 
+class WatchdogThread(threading.Thread):
+    def __init__(self, streamer, timeout=5):
+        super().__init__()
+        self.streamer = streamer
+        self.timeout = timeout
+
+        self.running = False
+        self.lock = threading.Lock()
+        self.watchdog_timer = time.monotonic()
+
+    def run(self):
+        while True:
+            with self.lock:
+                if (time.monotonic() - self.watchdog_timer) > self.timeout:
+                    print(f"No ping for {self.timeout} seconds. Shutting down the threads.")
+                    with self.streamer.camera_lock:
+                        self.running = False
+                        self.streamer.cleanup()
+                        return
+            time.sleep(1)
+
+    def ping(self):
+        with self.lock:
+            self.watchdog_timer = time.monotonic()
+
 class Streamer:
     def __init__(self):
         self.camera = None
@@ -113,17 +144,22 @@ class Streamer:
         self.prepare_frame_thread = None
         self.compute_thread = None
         self.odometry_saver_thread = None
+        self.watchdog_thread = None
         self.camera_lock = threading.Lock()
-        self.algorithm = None
+
+        self.algorithm = Algorithm.NONE
 
     def start_video(self):
+        if self.watchdog_thread is None:
+            self.watchdog_thread = WatchdogThread(self)
+            self.watchdog_thread.start()
+
         self.camera = TofCamera(frame_timeout=0)
         self.camera_thread = CameraThread(self.camera)
         self.camera.start()
         self.camera_thread.start()
         self.frame_saver_thread = FrameSaverThread(self.camera_thread, self.camera)
         self.frame_saver_thread.start()
-
 
     def cleanup_video(self):
         if self.camera_thread is not None:
@@ -139,6 +175,10 @@ class Streamer:
         self.camera = None
 
     def start_odometry(self):
+        if self.watchdog_thread is None:
+            self.watchdog_thread = WatchdogThread(self)
+            self.watchdog_thread.start()
+
         self.camera = TofCamera(frame_timeout=0)
         self.camera_thread = CameraThread(self.camera)
         self.camera.start()
@@ -173,16 +213,24 @@ class Streamer:
         self.compute_thread = None
         self.odometry_saver_thread = None
 
+    def cleanup(self):
+        if self.algorithm == Algorithm.VIDEO:
+            self.cleanup_video()
+        elif self.algorithm == Algorithm.ODOMETRY:
+            self.cleanup_odometry()
+
+        self.watchdog_thread = None
+        self.algorithm = Algorithm.NONE
 
     def stream_frames(self, image="amplitude"):
         with self.camera_lock:
-            if self.algorithm == "odometry":
+            if self.algorithm == Algorithm.ODOMETRY:
                 self.cleanup_odometry()
-                self.algorithm = None
+                self.algorithm = Algorithm.NONE
 
-            if self.algorithm is None:
+            if self.algorithm == Algorithm.NONE:
                 self.start_video()
-                self.algorithm = "video"
+                self.algorithm = Algorithm.VIDEO
 
             print(f"Streaming video")
 
@@ -205,17 +253,19 @@ class Streamer:
                     b"Content-Type: text/plain\r\n\r\n" + stringData + b"\r\n"
                 )
                 yield output
+                if self.watchdog_thread is not None:
+                    self.watchdog_thread.ping()
                 time.sleep(0.1)
 
     def stream_odometry(self):
         with self.camera_lock:
-            if self.algorithm == "video":
+            if self.algorithm == Algorithm.VIDEO:
                 self.cleanup_video()
-                self.algorithm = None
+                self.algorithm = Algorithm.NONE
 
-            if self.algorithm is None:
+            if self.algorithm == Algorithm.NONE:
                 self.start_odometry()
-                self.algorithm = "odometry"
+                self.algorithm = Algorithm.ODOMETRY
             print("Streaming odometry")
 
         while True:
@@ -225,7 +275,8 @@ class Streamer:
             if frame is None:
                 continue
             yield f"data: {json.dumps(frame)}\n\n"
-
+            if self.watchdog_thread is not None:
+                self.watchdog_thread.ping()
             time.sleep(0.1)
 
 streamer = Streamer()
