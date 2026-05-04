@@ -2,8 +2,10 @@ import time
 
 import cv2
 import numpy as np
+from cv2.rgbd import OdometryFrame
+from scipy.linalg import expm, logm
+from scipy.spatial.transform import Rotation
 
-from src.profileit import profileit
 from src import conf
 
 
@@ -39,10 +41,15 @@ class IcpOdometry:
         print(f"Transform type: {self.icpo.getTransformType()}")
         print("--------")
 
-        self.anchor_odometry_frame = None
-        self.previous_transform = np.eye(4, dtype=np.float64)
-        self.global_pose = np.eye(4, dtype=np.float64)
-        self.skipped_frames = 0
+        self.anchor_odometry_frame: OdometryFrame | None = None
+        self.anchor_attitude: Rotation | None = None
+        self.previous_transform: np.ndarray = np.eye(
+            4, dtype=np.float64
+        )  # 4x4 transform matrix
+        self.global_pose: np.ndarray = np.eye(
+            4, dtype=np.float64
+        )  # 4x4 transform matrix
+        self.skipped_frames: int = 0
 
     def prepare_frame(self, amplitude, depth, mask, frame_id):
         _start_time = time.monotonic_ns()
@@ -55,40 +62,60 @@ class IcpOdometry:
 
         return current_odometry_frame, time.monotonic_ns() - _start_time
 
-    def compute_frame(self, odometry_frame):
+    def compute_frame(self, odometry_frame, attitude_quaternion_msg=None):
         _start_time = time.monotonic_ns()
+
+        attitude = None
+        if attitude_quaternion_msg is not None:
+            att = attitude_quaternion_msg
+            attitude = np.array([att.q1, att.q2, att.q3, att.q4])
+            attitude = Rotation.from_quat(attitude)
+
         if self.anchor_odometry_frame is not None:
             # Scale the initial transformation by the amount of lost frames
             init_rt = self.previous_transform
             if self.skipped_frames > 0:
                 init_rt = np.linalg.matrix_power(init_rt, self.skipped_frames + 1)
 
+            if attitude is not None and self.anchor_attitude is not None:
+                att_delta = attitude * self.anchor_attitude.inv()
+                init_rt[:3, :3] = att_delta.as_matrix()
+
             success, transform = self.icpo.compute2(
                 self.anchor_odometry_frame, odometry_frame, initRt=init_rt
             )
             if success:
                 self.global_pose @= transform
+
+                if attitude is not None:
+                    self.global_pose[:3, :3] = attitude.as_matrix()
+
                 self.anchor_odometry_frame = odometry_frame
+                if attitude is not None:
+                    self.anchor_attitude = attitude
 
                 if self.skipped_frames == 0:
                     self.previous_transform = transform
                 else:
-                    # TODO: Average out the transform for initRt
+                    self.previous_transform = expm(logm(transform) / (self.skipped_frames + 1)).real  # type: ignore
                     self.skipped_frames = 0
             else:
                 self.skipped_frames += 1
                 print(f"Skipped frames: {self.skipped_frames}")
                 if self.skipped_frames > 2:
                     print("Lost tracking. Re-set using linear prediction.")
-                    jump = np.linalg.matrix_power(
-                        self.previous_transform, self.skipped_frames + 1
-                    )
-                    self.global_pose @= jump
+                    # Apply the 'guess' as the real prediction since we lost tracking
+                    # and it's the best compromise
+                    self.global_pose @= init_rt
                     self.anchor_odometry_frame = odometry_frame
+                    if attitude is not None:
+                        self.anchor_attitude = attitude
                     self.skipped_frames = 0
                     self.previous_transform = np.eye(4, dtype=np.float64)
         else:
             self.anchor_odometry_frame = odometry_frame
+            if attitude is not None:
+                self.anchor_attitude = attitude
 
         return self.global_pose, time.monotonic_ns() - _start_time
 

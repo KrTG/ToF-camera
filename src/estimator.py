@@ -4,7 +4,9 @@ import time
 from threading import Condition, Thread
 from typing import Optional, Tuple
 
-from src import conf
+from pymavlink import mavutil
+
+from src import conf, mav
 from src.icpo import IcpOdometry
 from src.tof_camera import TofCamera
 
@@ -34,10 +36,13 @@ class PipelineThread(Thread):
 
 
 class CameraThread(PipelineThread):
-    def __init__(self, camera: TofCamera, framerate_divisor: int = conf.FRAME_DIV):
+    def __init__(self, camera: TofCamera, framerate_divisor: int = conf.FRAME_DIV, mav_connection: mavutil.mavserial | None = None):
         super().__init__()
         self.camera = camera
         self.divisor = framerate_divisor
+        self.mav_state = None
+        if mav_connection:
+            self.mav_state = mav.StateMonitor(mav_connection, async_messages=["ATTITUDE_QUATERNION"], sync_messages=[])
 
         self.frame_counter = 0
 
@@ -45,8 +50,10 @@ class CameraThread(PipelineThread):
         self.running = True
         try:
             while self.running:
-                frame = self.camera.get_frame_raw()
+                if self.mav_state is not None:
+                    self.mav_state.update_state()
 
+                frame = self.camera.get_frame_raw()
                 if frame is None:
                     time.sleep(0.0001)
                     continue
@@ -58,7 +65,14 @@ class CameraThread(PipelineThread):
 
                 amplitude, depth, mask, _time = self.camera.get_frame_rgbd(frame)
                 self.camera.release_frame_raw(frame)
-                frame = (amplitude, depth, mask, {"camera": _time})
+
+                extra_data = {}
+                extra_data["camera_time"] = _time
+
+                if self.mav_state is not None:
+                    extra_data["attitude"] = self.mav_state.attitude_quaternion
+
+                frame = (amplitude, depth, mask, extra_data)
 
                 # We should process this frame
                 with self.condition:
@@ -94,12 +108,12 @@ class PrepareFrameThread(PipelineThread):
                     self.running = False
                     break
 
-                amplitude, depth, mask, times = frame
+                amplitude, depth, mask, extra_data = frame
                 odometry_frame, _time = self.odometry.prepare_frame(
                     amplitude, depth, mask, self.frame_counter
                 )
-                times["cache"] = _time
-                frame = (odometry_frame, times)
+                extra_data["cache_time"] = _time
+                frame = (odometry_frame, extra_data)
 
                 self.frame_counter += 1
 
@@ -136,10 +150,10 @@ class ComputeThread(PipelineThread):
                     self.running = False
                     break
 
-                odometry_frame, times = frame
-                pose, _time = self.odometry.compute_frame(odometry_frame)
-                times["compute"] = _time
-                frame = (pose, odometry_frame.ID, times)
+                odometry_frame, extra_data = frame
+                pose, _time = self.odometry.compute_frame(odometry_frame, extra_data.get("attitude"))
+                extra_data["compute_time"] = _time
+                frame = (pose, odometry_frame.ID, extra_data)
 
                 if os.path.isfile("/tmp/reset"):
                     os.remove("/tmp/reset")
@@ -195,9 +209,9 @@ def main():
             if frame is None:
                 break
             global_pose, frame_id, times = frame
-            prep_time = times["camera"]
-            cache_time = times["cache"]
-            compute_time = times["compute"]
+            prep_time = times["camera_time"]
+            cache_time = times["cache_time"]
+            compute_time = times["compute_time"]
 
             if (frame_id + 1) % 50 == 0:
                 print(f"Time budget: {33 * conf.FRAME_DIV} ms")

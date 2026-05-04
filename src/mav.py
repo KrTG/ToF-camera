@@ -43,6 +43,27 @@ class Commander:
                 0,
             )
 
+    def set_message_interval(self, message: int, interval_us: int):
+        print("<MESSAGE INTERVAL>")
+        interval_message = self.connection.mav.command_long_encode(
+            self.connection.target_system,
+            self.connection.target_component,
+            mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
+            0,
+            message,
+            interval_us,
+            0,
+            0,
+            0,
+            0,
+            0,
+        )
+        self.connection.mav.send(interval_message)
+        response = self.connection.recv_match(type="COMMAND_ACK", blocking=True)
+        print(response)
+        print("</MESSAGE INTERVAL>")
+        return response.result  # type: ignore
+
 
 class StateMonitor:
     def __init__(
@@ -151,19 +172,36 @@ if __name__ == "__main__":
         connection = get_connection()
         commander = Commander(connection)
         state = StateMonitor(
-            connection, async_messages=["HEARTBEAT", "SYS_STATUS"], sync_messages=["ATTITUDE"]
+            connection,
+            async_messages=["HEARTBEAT", "SYS_STATUS"],
+            sync_messages=["ATTITUDE_QUATERNION"],
         )
 
+        commander.send_heartbeat()
+        commander.wait_heartbeat()
+        commander.set_message_interval(
+            mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE_QUATERNION, 6500
+        )  # 150 FPS
+
         _time = time.monotonic()
+        i = 0
         while True:
-            print("Sending heartbeat.")
+            i += 1
             commander.send_heartbeat()
             state.update_state()
-            print(f"FPS: {1 / (time.monotonic() - _time):.0f}")
-            _time = time.monotonic()
-            print(f"Voltage: {state.voltage / 1000 / 4}")
-            print(f"Attitude: r:{state.attitude.roll} p:{state.attitude.roll} y: {state.attitude.yaw}")
 
-
+            if i % 100 == 0:
+                print(f"FPS: {1 / (time.monotonic() - _time) * 100:.0f}")
+                _time = time.monotonic()
+                print(f"Voltage: {state.voltage / 1000 / 4}")
+                # print(f"Attitude: r:{state.attitude.roll} p:{state.attitude.roll} y: {state.attitude.yaw}")
+                print(
+                    f"Attitude quat: q1:{state.attitude_quaternion.q1} q2:{state.attitude_quaternion.q1} q3: {state.attitude_quaternion.q3} q4: {state.attitude_quaternion.q4}"
+                )
     except ConnectionError:
         print("Connection lost.")
+    finally:
+        try:
+            connection.close()
+        except Exception:
+            pass
