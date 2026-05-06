@@ -140,6 +140,7 @@ class WatchdogThread(threading.Thread):
 class Streamer:
     def __init__(self):
         self.camera = None
+        self.mav_connection = None
         self.camera_thread = None
         self.frame_saver_thread = None
         self.prepare_frame_thread = None
@@ -180,10 +181,10 @@ class Streamer:
             self.watchdog_thread = WatchdogThread(self)
             self.watchdog_thread.start()
 
-        mav_connection = mav.get_connection()
-        heartbeat = mav_connection.wait_heartbeat(timeout=3)
-        if heartbeat is not None:
-            self.mav_connection = mav_connection
+        #mav_connection = mav.get_connection()
+        #heartbeat = mav_connection.wait_heartbeat(timeout=3)
+        #if heartbeat is not None:
+        #    self.mav_connection = mav_connection
 
         self.camera = TofCamera(frame_timeout=0)
         self.camera_thread = CameraThread(self.camera, mav_connection=self.mav_connection)
@@ -193,6 +194,7 @@ class Streamer:
         self.prepare_frame_thread = PrepareFrameThread(self.camera_thread, self.odometry)
         self.compute_thread = ComputeThread(self.prepare_frame_thread, self.odometry)
         self.odometry_saver_thread = OdometrySaverThread(self.compute_thread)
+
         self.prepare_frame_thread.start()
         self.compute_thread.start()
         self.odometry_saver_thread.start()

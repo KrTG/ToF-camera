@@ -179,9 +179,9 @@ if __name__ == "__main__":
 
         commander.send_heartbeat()
         commander.wait_heartbeat()
-        commander.set_message_interval(
-            mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE_QUATERNION, 6500
-        )  # 150 FPS
+        #commander.set_message_interval(
+        #    mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE_QUATERNION, 6500
+        #)  # 150 FPS
 
         _time = time.monotonic()
         i = 0

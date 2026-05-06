@@ -46,10 +46,33 @@ class IcpOdometry:
         self.previous_transform: np.ndarray = np.eye(
             4, dtype=np.float64
         )  # 4x4 transform matrix
-        self.global_pose: np.ndarray = np.eye(
-            4, dtype=np.float64
-        )  # 4x4 transform matrix
         self.skipped_frames: int = 0
+
+        self.camera_mount_euler = (0, -90, 0) # Camera rotation in the FRD frame - facing down
+
+        self.camera_mount_rotation = Rotation.from_euler('xyz', self.camera_mount_euler, degrees=True)
+        self.frd_to_rdf_rotation = Rotation.from_matrix([
+            [0, 1, 0],
+            [0, 0, 1],
+            [1, 0, 0]
+        ])
+
+        self.rdf_to_frd_rotation = Rotation.from_matrix([
+            [0, 0, 1],
+            [1, 0, 0],
+            [0, 1, 0]
+        ])
+
+        self.frd_to_rdf_transform = np.eye(4)
+        self.frd_to_rdf_transform[:3, :3] = self.frd_to_rdf_rotation.as_matrix()
+
+        self.rdf_to_frd_transform = np.eye(4)
+        self.rdf_to_frd_transform[:3, :3] = self.rdf_to_frd_rotation.as_matrix()
+
+        self.camera_mount_transform = np.eye(4)
+        self.camera_mount_transform[:3, :3] = self.camera_mount_rotation.as_matrix()
+
+        self.reset_position()
 
     def prepare_frame(self, amplitude, depth, mask, frame_id):
         _start_time = time.monotonic_ns()
@@ -68,8 +91,12 @@ class IcpOdometry:
         attitude = None
         if attitude_quaternion_msg is not None:
             att = attitude_quaternion_msg
-            attitude = np.array([att.q1, att.q2, att.q3, att.q4])
+            attitude = np.array([att.q2, att.q3, att.q4, att.q1])
             attitude = Rotation.from_quat(attitude)
+            # Correct for camera mounting orientation
+            attitude = attitude * self.camera_mount_rotation
+            # Convert coordinate frames
+            attitude = self.frd_to_rdf_rotation * attitude
 
         if self.anchor_odometry_frame is not None:
             # Scale the initial transformation by the amount of lost frames
@@ -85,7 +112,7 @@ class IcpOdometry:
                 self.anchor_odometry_frame, odometry_frame, initRt=init_rt
             )
             if success:
-                self.global_pose @= transform
+                self.global_pose @= np.linalg.inv(transform)
 
                 if attitude is not None:
                     self.global_pose[:3, :3] = attitude.as_matrix()
@@ -97,7 +124,8 @@ class IcpOdometry:
                 if self.skipped_frames == 0:
                     self.previous_transform = transform
                 else:
-                    self.previous_transform = expm(logm(transform) / (self.skipped_frames + 1)).real  # type: ignore
+                    # Maybe it crashes the program (too expensive)
+                    #self.previous_transform = expm(logm(transform) / (self.skipped_frames + 1)).real  # type: ignore
                     self.skipped_frames = 0
             else:
                 self.skipped_frames += 1
@@ -116,8 +144,10 @@ class IcpOdometry:
             self.anchor_odometry_frame = odometry_frame
             if attitude is not None:
                 self.anchor_attitude = attitude
-
-        return self.global_pose, time.monotonic_ns() - _start_time
+        #pose = self.global_pose
+        pose = self.rdf_to_frd_transform @ self.global_pose @ self.rdf_to_frd_transform.T
+        pose @= self.camera_mount_transform.T
+        return pose, time.monotonic_ns() - _start_time
 
     def next_frame(self, amplitude, depth, mask, frame_id):
         _start_time = time.monotonic_ns()
@@ -131,3 +161,5 @@ class IcpOdometry:
 
     def reset_position(self):
         self.global_pose = np.eye(4, dtype=np.float64)
+        cam_rotation_rdf = self.frd_to_rdf_rotation * self.camera_mount_rotation * self.frd_to_rdf_rotation.inv()
+        self.global_pose[:3, :3] = cam_rotation_rdf.as_matrix()

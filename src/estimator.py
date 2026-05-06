@@ -5,6 +5,7 @@ from threading import Condition, Thread
 from typing import Optional, Tuple
 
 from pymavlink import mavutil
+from scipy.spatial.transform import Rotation
 
 from src import conf, mav
 from src.icpo import IcpOdometry
@@ -175,21 +176,26 @@ class ComputeThread(PipelineThread):
                 self.condition.notify_all()
 
 
-# Everything is inverted!
 def get_translation(pose):
+    return (pose[0, 3], pose[1, 3], pose[2, 3])
+
+
+def get_rotation_degrees(pose):
+    rot_matrix = pose[:3, :3]
+    r = Rotation.from_matrix(rot_matrix)
+    yaw, pitch, roll = r.as_euler('zyx', degrees=True)
+
+    return roll, pitch, yaw
+
+def get_translation_from_vision_frame(pose):
     return (-pose[2, 3], -pose[0, 3], -pose[1, 3])
 
 
-def get_rotation(pose):
+def get_rotation_from_vision_frame(pose):
     yaw = -math.atan2(-pose[2, 0], math.sqrt(pose[2, 1] ** 2 + pose[2, 2] ** 2))
     roll = -math.atan2(pose[1, 0], pose[0, 0])
     pitch = -math.atan2(pose[2, 1], pose[2, 2])
     return roll, pitch, yaw
-
-
-def get_rotation_degrees(pose):
-    r, p, y = get_rotation(pose)
-    return math.degrees(r), math.degrees(p), math.degrees(y)
 
 
 def main():
