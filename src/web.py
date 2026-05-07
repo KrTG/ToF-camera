@@ -7,6 +7,7 @@ import time
 from typing import Optional, Tuple
 
 import cv2
+from pymavlink import mavutil
 
 from src import mav
 from src.estimator import (CameraThread, ComputeThread, PipelineThread,
@@ -177,14 +178,17 @@ class Streamer:
         self.camera = None
 
     def start_odometry(self):
+        mav_connection = mav.get_connection()
+        heartbeat = mav_connection.wait_heartbeat(timeout=3)
+        if heartbeat is not None:
+            self.mav_connection = mav_connection
+            mav.Commander(mav_connection).set_message_interval(
+                mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE_QUATERNION, 6500
+            )  # 150 FPS
+
         if self.watchdog_thread is None:
             self.watchdog_thread = WatchdogThread(self)
             self.watchdog_thread.start()
-
-        #mav_connection = mav.get_connection()
-        #heartbeat = mav_connection.wait_heartbeat(timeout=3)
-        #if heartbeat is not None:
-        #    self.mav_connection = mav_connection
 
         self.camera = TofCamera(frame_timeout=0)
         self.camera_thread = CameraThread(self.camera, mav_connection=self.mav_connection)

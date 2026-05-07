@@ -3,6 +3,7 @@ import time
 from typing import Any, Mapping
 
 from pymavlink import mavutil
+from serial import Serial
 
 SERIAL_PORT = "/dev/serial0"
 BAUD_RATE = 921600
@@ -20,6 +21,11 @@ def get_connection() -> mavutil.mavserial:
     connection = mavutil.mavlink_connection(device=SERIAL_PORT, baud=BAUD_RATE)
 
     assert isinstance(connection, mavutil.mavserial)
+    assert isinstance(connection.port, Serial)
+    connection.port.xonxoff = False
+    connection.port.rtscts  = False
+    connection.port.dsrdtr  = False
+
     return connection
 
 
@@ -58,8 +64,13 @@ class Commander:
             0,
             0,
         )
-        self.connection.mav.send(interval_message)
-        response = self.connection.recv_match(type="COMMAND_ACK", blocking=True)
+        response = None
+        while True:
+            self.connection.mav.send(interval_message)
+            response = self.connection.recv_match(type="COMMAND_ACK", blocking=True, timeout=1)
+            if response is not None:
+                break
+
         print(response)
         print("</MESSAGE INTERVAL>")
         return response.result  # type: ignore

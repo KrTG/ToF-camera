@@ -53,7 +53,7 @@ def shutdown_system():
 @app.post("/reload")
 def reload_service():
     try:
-        subprocess.run(['sudo', 'systemctl', 'restart', 'cam'], check=True)
+        subprocess.run(['setsid', 'sudo', 'systemctl', 'restart', 'cam'], check=True)
         return redirect(url_for("index"))
     except Exception as e:
         return make_response(str(e), 500)
