@@ -43,7 +43,7 @@ class CameraThread(PipelineThread):
         self.divisor = framerate_divisor
         self.mav_state = None
         if mav_connection:
-            self.mav_state = mav.StateMonitor(mav_connection, async_messages=["ATTITUDE_QUATERNION"], sync_messages=[])
+            self.mav_state = mav.StateMonitor(mav_connection, async_messages=["ATTITUDE_QUATERNION", "SYS_STATUS"], sync_messages=[])
 
         self.frame_counter = 0
 
@@ -71,7 +71,8 @@ class CameraThread(PipelineThread):
                 extra_data["camera_time"] = _time
 
                 if self.mav_state is not None:
-                    extra_data["attitude"] = self.mav_state.attitude_quaternion
+                    extra_data["ATTITUDE_QUATERNION"] = self.mav_state.attitude_quaternion
+                    extra_data["SYS_STATUS"] = self.mav_state.sys_status
 
                 frame = (amplitude, depth, mask, extra_data)
 
@@ -152,7 +153,7 @@ class ComputeThread(PipelineThread):
                     break
 
                 odometry_frame, extra_data = frame
-                pose, _time = self.odometry.compute_frame(odometry_frame, extra_data.get("attitude"))
+                pose, _time = self.odometry.compute_frame(odometry_frame, extra_data.get("ATTITUDE_QUATERNION"))
                 extra_data["compute_time"] = _time
                 frame = (pose, odometry_frame.ID, extra_data)
 

@@ -26,14 +26,25 @@
 </div>
 
 <h3>Translation</h3>
-<div>X (forwards/backwards): <span id="val-x">0</span></div>
-<div>Y (right/left): <span id="val-y">0</span></div>
-<div>Z (down/up): <span id="val-z">0</span></div>
+<div class="dashboard-container">
+    <table class="data-table">
+        <tr><td>X (Forward):</td><td><span id="val-x">0</span></td></tr>
+        <tr><td>Y (Right):</td><td><span id="val-y">0</span></td></tr>
+        <tr><td>Z (Down):</td><td><span id="val-z">0</span></td></tr>
+    </table>
+</div>
 
 <h3>Rotation</h3>
-<div>Roll: <span id="val-roll">0</span></div>
-<div>Pitch: <span id="val-pitch">0</span></div>
-<div>Yaw: <span id="val-yaw">0</span></div>
+<div class="dashboard-container">
+    <table class="data-table">
+        <tr><td>Roll:</td><td><span id="val-roll">0</span></td></tr>
+        <tr><td>Pitch:</td><td><span id="val-pitch">0</span></td></tr>
+        <tr><td>Yaw:</td><td><span id="val-yaw">0</span></td></tr>
+    </table>
+</div>
+
+<h3>State</h3>
+<div>Voltage: <span id="val-voltage">0</span></div>
 
 <button class="big_button" type="button" id="reset-btn">Reset Odometry</button>
 
@@ -74,6 +85,8 @@
         document.getElementById("val-roll").innerText = data.roll.toFixed(1);
         document.getElementById("val-pitch").innerText = data.pitch.toFixed(1);
         document.getElementById("val-yaw").innerText = data.yaw.toFixed(1);
+
+        document.getElementById("val-voltage").innerText = data.voltage.toFixed(2);
     };
 
     document.getElementById('reset-btn').addEventListener('click', function() {

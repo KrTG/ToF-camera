@@ -190,9 +190,9 @@ if __name__ == "__main__":
 
         commander.send_heartbeat()
         commander.wait_heartbeat()
-        #commander.set_message_interval(
-        #    mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE_QUATERNION, 6500
-        #)  # 150 FPS
+        commander.set_message_interval(
+            mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE_QUATERNION, 6500
+        )  # 150 FPS
 
         _time = time.monotonic()
         i = 0
@@ -205,7 +205,6 @@ if __name__ == "__main__":
                 print(f"FPS: {1 / (time.monotonic() - _time) * 100:.0f}")
                 _time = time.monotonic()
                 print(f"Voltage: {state.voltage / 1000 / 4}")
-                # print(f"Attitude: r:{state.attitude.roll} p:{state.attitude.roll} y: {state.attitude.yaw}")
                 print(
                     f"Attitude quat: q1:{state.attitude_quaternion.q1} q2:{state.attitude_quaternion.q1} q3: {state.attitude_quaternion.q3} q4: {state.attitude_quaternion.q4}"
                 )

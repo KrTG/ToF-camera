@@ -100,6 +100,7 @@ class OdometrySaverThread(PipelineThread):
                         "roll": roll,
                         "pitch": pitch,
                         "yaw": yaw,
+                        "voltage": times["SYS_STATUS"].voltage_battery / 1000 / 4
                     }
 
                     with self.condition:
