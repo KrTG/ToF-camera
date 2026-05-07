@@ -91,12 +91,12 @@ class IcpOdometry:
         attitude = None
         if attitude_quaternion_msg is not None:
             att = attitude_quaternion_msg
-            attitude = np.array([att.q2, att.q3, att.q4, att.q1])
-            attitude = Rotation.from_quat(attitude)
+            attitude = np.array([att.q1, att.q2, att.q3, att.q4])
+            attitude = Rotation.from_quat(attitude, scalar_first=True)
             # Correct for camera mounting orientation
             attitude = attitude * self.camera_mount_rotation
             # Convert coordinate frames
-            attitude = self.frd_to_rdf_rotation * attitude
+            attitude = self.frd_to_rdf_rotation * attitude * self.frd_to_rdf_rotation.inv()
 
         if self.anchor_odometry_frame is not None:
             # Scale the initial transformation by the amount of lost frames
@@ -105,8 +105,9 @@ class IcpOdometry:
                 init_rt = np.linalg.matrix_power(init_rt, self.skipped_frames + 1)
 
             if attitude is not None and self.anchor_attitude is not None:
-                att_delta = attitude * self.anchor_attitude.inv()
+                att_delta = attitude.inv() * self.anchor_attitude
                 init_rt[:3, :3] = att_delta.as_matrix()
+
 
             success, transform = self.icpo.compute2(
                 self.anchor_odometry_frame, odometry_frame, initRt=init_rt
@@ -144,7 +145,6 @@ class IcpOdometry:
             self.anchor_odometry_frame = odometry_frame
             if attitude is not None:
                 self.anchor_attitude = attitude
-        #pose = self.global_pose
         pose = self.rdf_to_frd_transform @ self.global_pose @ self.rdf_to_frd_transform.T
         pose @= self.camera_mount_transform.T
         return pose, time.monotonic_ns() - _start_time
