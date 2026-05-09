@@ -113,7 +113,6 @@ class IcpOdometry:
     def compute_frame(self, odometry_frame, rotation: Rotation | None = None):
         t_error = 0
         r_error_deg = 0
-        c_error_deg = 0
         _start_time = time.monotonic_ns()
 
         attitude = None
@@ -140,9 +139,6 @@ class IcpOdometry:
             if success:
                 self.global_pose @= fast_inversion(transform)
 
-                correction_error = self.previous_transform @ fast_inversion(init_rt)
-                c_error = Rotation.from_matrix(correction_error[:3, :3])
-                c_error_deg = c_error.magnitude() * (180 / np.pi)
                 prediction_error = transform @ fast_inversion(init_rt)
                 t_error = np.linalg.norm(prediction_error[:3, 3])
                 r_error = Rotation.from_matrix(prediction_error[:3, :3])
@@ -180,14 +176,14 @@ class IcpOdometry:
             if attitude is not None:
                 self.anchor_attitude = attitude
         pose = self.rdf_to_frd_transform @ self.global_pose @ self.final_transform
-        return pose, time.monotonic_ns() - _start_time, t_error, r_error_deg, c_error_deg
+        return pose, time.monotonic_ns() - _start_time, t_error, r_error_deg
 
     def next_frame(self, amplitude, depth, mask, frame_id):
         _start_time = time.monotonic_ns()
         current_odometry_frame, _prep_time = self.prepare_frame(
             amplitude, depth, mask, frame_id
         )
-        pose, _compute_time, _, _, _ = self.compute_frame(current_odometry_frame)
+        pose, _compute_time, _, _, = self.compute_frame(current_odometry_frame)
         _total_time = time.monotonic_ns() - _start_time
 
         return (pose, _total_time, _prep_time, _compute_time)

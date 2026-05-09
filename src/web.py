@@ -64,7 +64,6 @@ class OdometrySaverThread(PipelineThread):
         self.compute_times = deque(maxlen=100)
         self.t_errors = deque(maxlen=100)
         self.r_errors = deque(maxlen=100)
-        self.c_errors = deque(maxlen=100)
 
     def run(self):
         self.running = True
@@ -81,7 +80,6 @@ class OdometrySaverThread(PipelineThread):
                 self.compute_times.append(times["compute_time"])
                 self.t_errors.append(times["t_error"])
                 self.r_errors.append(times["r_error"])
-                self.c_errors.append(times["c_error"])
 
                 if frame_id % 1 == 0:
                     x, y, z = get_translation(pose)
@@ -109,16 +107,12 @@ class OdometrySaverThread(PipelineThread):
                         "voltage": times["SYS_STATUS"].voltage_battery / 1000 / 4,
                         "t_error": times["t_error"],
                         "r_error": times["r_error"],
-                        "c_error": times["c_error"],
                         "t_error_min": min(self.t_errors),
                         "t_error_max": max(self.t_errors),
                         "t_error_avg": mean(self.t_errors),
                         "r_error_min": min(self.r_errors),
                         "r_error_max": max(self.r_errors),
                         "r_error_avg": mean(self.r_errors),
-                        "c_error_min": min(self.c_errors),
-                        "c_error_max": max(self.c_errors),
-                        "c_error_avg": mean(self.c_errors),
                     }
 
                     with self.condition:

@@ -62,14 +62,6 @@
             <td>(min: <span id="val-r-error-min">0</span>, max: <span id="val-r-error-max">0</span>, avg: <span id="val-r-error-avg">0</span>)</td>
             <td></td>
         </tr>
-        <tr>
-            <td>Correction Error:</td>
-            <td><span id="val-c-error">0</span> °</td>
-        </tr>
-        <tr>
-            <td>(min: <span id="val-c-error-min">0</span>, max: <span id="val-c-error-max">0</span>, avg: <span id="val-c-error-avg">0</span>)</td>
-            <td></td>
-        </tr>
     </table>
 </div>
 
@@ -130,12 +122,6 @@
         document.getElementById("val-r-error-min").innerText = data.r_error_min.toFixed(4);
         document.getElementById("val-r-error-max").innerText = data.r_error_max.toFixed(4);
         document.getElementById("val-r-error-avg").innerText = data.r_error_avg.toFixed(4);
-
-        // Correction Error Updates
-        document.getElementById("val-c-error").innerText = data.c_error.toFixed(4);
-        document.getElementById("val-c-error-min").innerText = data.c_error_min.toFixed(4);
-        document.getElementById("val-c-error-max").innerText = data.c_error_max.toFixed(4);
-        document.getElementById("val-c-error-avg").innerText = data.c_error_avg.toFixed(4);
     };
 
     document.getElementById('reset-btn').addEventListener('click', function() {
