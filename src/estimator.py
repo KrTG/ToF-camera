@@ -8,6 +8,7 @@ from pymavlink import mavutil
 from scipy.spatial.transform import Rotation
 
 from src import conf, mav
+from src.calc import interpolate
 from src.icpo import IcpOdometry
 from src.tof_camera import TofCamera
 
@@ -43,7 +44,7 @@ class CameraThread(PipelineThread):
         self.divisor = framerate_divisor
         self.mav_state = None
         if mav_connection:
-            self.mav_state = mav.StateMonitor(mav_connection, async_messages=["ATTITUDE_QUATERNION", "SYS_STATUS"], sync_messages=[])
+            self.mav_state = mav.StateMonitor(mav_connection, async_messages=["SYS_STATUS"], sync_messages=["ATTITUDE_QUATERNION"])
 
         self.frame_counter = 0
 
@@ -53,8 +54,11 @@ class CameraThread(PipelineThread):
             while self.running:
                 if self.mav_state is not None:
                     self.mav_state.update_state()
+                    time_pre = self.mav_state.times["ATTITUDE_QUATERNION"]
+                    att_pre = self.mav_state.current_state["ATTITUDE_QUATERNION"]
 
                 frame = self.camera.get_frame_raw()
+                time_frame = time.perf_counter()
                 if frame is None:
                     time.sleep(0.0001)
                     continue
@@ -64,6 +68,11 @@ class CameraThread(PipelineThread):
                     self.camera.release_frame_raw(frame)
                     continue
 
+                if self.mav_state is not None:
+                    self.mav_state.update_state()
+                    time_post = self.mav_state.times["ATTITUDE_QUATERNION"]
+                    att_post = self.mav_state.current_state["ATTITUDE_QUATERNION"]
+
                 amplitude, depth, mask, _time = self.camera.get_frame_rgbd(frame)
                 self.camera.release_frame_raw(frame)
 
@@ -71,7 +80,7 @@ class CameraThread(PipelineThread):
                 extra_data["camera_time"] = _time
 
                 if self.mav_state is not None:
-                    extra_data["ATTITUDE_QUATERNION"] = self.mav_state.attitude_quaternion
+                    extra_data["ROTATION"] = interpolate(att_pre, time_pre, time_frame, att_post, time_post)
                     extra_data["SYS_STATUS"] = self.mav_state.sys_status
 
                 frame = (amplitude, depth, mask, extra_data)
@@ -153,8 +162,11 @@ class ComputeThread(PipelineThread):
                     break
 
                 odometry_frame, extra_data = frame
-                pose, _time = self.odometry.compute_frame(odometry_frame, extra_data.get("ATTITUDE_QUATERNION"))
+                pose, _time, t_error, r_error, c_error = self.odometry.compute_frame(odometry_frame, extra_data.get("ROTATION"))
                 extra_data["compute_time"] = _time
+                extra_data["t_error"] = t_error
+                extra_data["r_error"] = r_error
+                extra_data["c_error"] = c_error
                 frame = (pose, odometry_frame.ID, extra_data)
 
                 if os.path.isfile("/tmp/reset"):

@@ -7,6 +7,27 @@ from scipy.linalg import expm, logm
 from scipy.spatial.transform import Rotation
 
 from src import conf
+from src import profileit
+
+
+def fast_inversion(transform):
+    R_inv = transform[:3, :3].T
+    t_inv = -R_inv @ transform[:3, 3]
+    inv = np.eye(4, dtype=np.float64)
+    inv[:3, :3] = R_inv
+    inv[:3, 3] = t_inv
+
+    return inv
+
+
+def fractional_se3_power(transform: np.ndarray, scale: float) -> np.ndarray:
+    scaled_transform = np.eye(4, dtype=np.float64)
+
+    rot_vec = Rotation.from_matrix(transform[:3, :3]).as_rotvec()
+    scaled_transform[:3, :3] = Rotation.from_rotvec(rot_vec * scale).as_matrix()
+    scaled_transform[:3, 3] = transform[:3, 3] * scale
+
+    return scaled_transform
 
 
 class IcpOdometry:
@@ -72,6 +93,10 @@ class IcpOdometry:
         self.camera_mount_transform = np.eye(4)
         self.camera_mount_transform[:3, :3] = self.camera_mount_rotation.as_matrix()
 
+        # Cached ops
+        self.frd_to_rdf_rotation_inv = self.rdf_to_frd_rotation
+        self.final_transform = self.rdf_to_frd_transform.T @ self.camera_mount_transform.T
+
         self.reset_position()
 
     def prepare_frame(self, amplitude, depth, mask, frame_id):
@@ -85,22 +110,23 @@ class IcpOdometry:
 
         return current_odometry_frame, time.monotonic_ns() - _start_time
 
-    def compute_frame(self, odometry_frame, attitude_quaternion_msg=None):
+    def compute_frame(self, odometry_frame, rotation: Rotation | None = None):
+        t_error = 0
+        r_error_deg = 0
+        c_error_deg = 0
         _start_time = time.monotonic_ns()
 
         attitude = None
-        if attitude_quaternion_msg is not None:
-            att = attitude_quaternion_msg
-            attitude = np.array([att.q1, att.q2, att.q3, att.q4])
-            attitude = Rotation.from_quat(attitude, scalar_first=True)
+        if rotation is not None:
+            attitude = rotation
             # Correct for camera mounting orientation
             attitude = attitude * self.camera_mount_rotation
             # Convert coordinate frames
-            attitude = self.frd_to_rdf_rotation * attitude * self.frd_to_rdf_rotation.inv()
+            attitude = self.frd_to_rdf_rotation * attitude * self.frd_to_rdf_rotation_inv
 
         if self.anchor_odometry_frame is not None:
             # Scale the initial transformation by the amount of lost frames
-            init_rt = self.previous_transform
+            init_rt = self.previous_transform.copy()
             if self.skipped_frames > 0:
                 init_rt = np.linalg.matrix_power(init_rt, self.skipped_frames + 1)
 
@@ -108,12 +134,20 @@ class IcpOdometry:
                 att_delta = attitude.inv() * self.anchor_attitude
                 init_rt[:3, :3] = att_delta.as_matrix()
 
-
             success, transform = self.icpo.compute2(
                 self.anchor_odometry_frame, odometry_frame, initRt=init_rt
             )
             if success:
-                self.global_pose @= np.linalg.inv(transform)
+                self.global_pose @= fast_inversion(transform)
+
+                correction_error = self.previous_transform @ fast_inversion(init_rt)
+                c_error = Rotation.from_matrix(correction_error[:3, :3])
+                c_error_deg = c_error.magnitude() * (180 / np.pi)
+                prediction_error = transform @ fast_inversion(init_rt)
+                t_error = np.linalg.norm(prediction_error[:3, 3])
+                r_error = Rotation.from_matrix(prediction_error[:3, :3])
+                r_error_deg = r_error.magnitude() * (180 / np.pi)
+                assert isinstance(r_error_deg, float)
 
                 if attitude is not None:
                     self.global_pose[:3, :3] = attitude.as_matrix()
@@ -125,8 +159,8 @@ class IcpOdometry:
                 if self.skipped_frames == 0:
                     self.previous_transform = transform
                 else:
-                    # Maybe it crashes the program (too expensive)
-                    #self.previous_transform = expm(logm(transform) / (self.skipped_frames + 1)).real  # type: ignore
+                    scale = 1.0 / (self.skipped_frames + 1)
+                    self.previous_transform = fractional_se3_power(transform, scale)
                     self.skipped_frames = 0
             else:
                 self.skipped_frames += 1
@@ -145,16 +179,15 @@ class IcpOdometry:
             self.anchor_odometry_frame = odometry_frame
             if attitude is not None:
                 self.anchor_attitude = attitude
-        pose = self.rdf_to_frd_transform @ self.global_pose @ self.rdf_to_frd_transform.T
-        pose @= self.camera_mount_transform.T
-        return pose, time.monotonic_ns() - _start_time
+        pose = self.rdf_to_frd_transform @ self.global_pose @ self.final_transform
+        return pose, time.monotonic_ns() - _start_time, t_error, r_error_deg, c_error_deg
 
     def next_frame(self, amplitude, depth, mask, frame_id):
         _start_time = time.monotonic_ns()
         current_odometry_frame, _prep_time = self.prepare_frame(
             amplitude, depth, mask, frame_id
         )
-        pose, _compute_time = self.compute_frame(current_odometry_frame)
+        pose, _compute_time, _, _, _ = self.compute_frame(current_odometry_frame)
         _total_time = time.monotonic_ns() - _start_time
 
         return (pose, _total_time, _prep_time, _compute_time)

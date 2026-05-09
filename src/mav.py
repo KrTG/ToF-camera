@@ -87,6 +87,7 @@ class StateMonitor:
         self.async_messages = async_messages
         self.sync_messages = sync_messages
         self.current_state = {}
+        self.times = {}
 
     def is_initialized(self):
         return all(
@@ -96,35 +97,40 @@ class StateMonitor:
 
     def update_state(self) -> Mapping[str, Any]:
         if self.connection:
-            self.process_messages(self.async_messages, sync=False)
-            self.process_messages(self.sync_messages, sync=True)
+            self.process_messages(self.sync_messages, self.async_messages)
         return self.current_state
 
-    def process_messages(self, messages, sync):
-        if len(messages) == 0:
+    def process_messages(self, sync_messages, async_messages):
+        if len(sync_messages) == 0 or len(async_messages) == 0:
             return
 
         if not self.is_initialized():
-            sync = True
+            sync_left = set(sync_messages) | set(async_messages)
+            async_left = set()
+        else:
+            sync_left = set(sync_messages)
+            async_left = set(async_messages)
 
-        msg_left = set(messages)
-        if sync:
+        if sync_left:
             stime = time.time()
-            while msg_left and (time.time() - stime) < TIMEOUT:
+            while sync_left and (time.time() - stime) < TIMEOUT:
                 message = self.connection.recv_match(blocking=True, timeout=TIMEOUT)
                 msg_type = None if message is None else message.get_type()
-                if msg_type in msg_left:
+                if msg_type in sync_left:
                     self.current_state[msg_type] = message
-                    msg_left.remove(msg_type)
-        else:
-            while msg_left:
+                    self.times[msg_type] = time.perf_counter()
+                    sync_left.remove(msg_type)
+
+        if async_left:
+            while async_left:
                 message = self.connection.recv_match(blocking=False, timeout=None)
                 if message is None:
                     break
                 msg_type = message.get_type()
-                if msg_type in messages:
+                if msg_type in async_left:
                     self.current_state[msg_type] = message
-                    msg_left.discard(msg_type)
+                    self.times[msg_type] = time.perf_counter()
+                    async_left.discard(msg_type)
 
     def wait_heartbeat(self):
         self.current_state["HEARTBEAT"] = self.connection.recv_match(

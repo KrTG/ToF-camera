@@ -43,6 +43,37 @@
     </table>
 </div>
 
+<h3>Error</h3>
+<div class="dashboard-container">
+    <table class="data-table">
+        <tr>
+            <td>Translation Error:</td>
+            <td><span id="val-t-error">0</span> m</td>
+        </tr>
+        <tr>
+            <td>(min: <span id="val-t-error-min">0</span>, max: <span id="val-t-error-max">0</span>, avg: <span id="val-t-error-avg">0</span>)</td>
+            <td></td>
+        </tr>
+        <tr>
+            <td>Rotation Error:</td>
+            <td><span id="val-r-error">0</span> °</td>
+        </tr>
+        <tr>
+            <td>(min: <span id="val-r-error-min">0</span>, max: <span id="val-r-error-max">0</span>, avg: <span id="val-r-error-avg">0</span>)</td>
+            <td></td>
+        </tr>
+        <tr>
+            <td>Correction Error:</td>
+            <td><span id="val-c-error">0</span> °</td>
+        </tr>
+        <tr>
+            <td>(min: <span id="val-c-error-min">0</span>, max: <span id="val-c-error-max">0</span>, avg: <span id="val-c-error-avg">0</span>)</td>
+            <td></td>
+        </tr>
+    </table>
+</div>
+
+
 <h3>State</h3>
 <div>Voltage: <span id="val-voltage">0</span></div>
 
@@ -87,6 +118,24 @@
         document.getElementById("val-yaw").innerText = data.yaw.toFixed(1);
 
         document.getElementById("val-voltage").innerText = data.voltage.toFixed(2);
+
+        // Translation Error Updates
+        document.getElementById("val-t-error").innerText = data.t_error.toFixed(4);
+        document.getElementById("val-t-error-min").innerText = data.t_error_min.toFixed(4);
+        document.getElementById("val-t-error-max").innerText = data.t_error_max.toFixed(4);
+        document.getElementById("val-t-error-avg").innerText = data.t_error_avg.toFixed(4);
+
+        // Rotation Error Updates
+        document.getElementById("val-r-error").innerText = data.r_error.toFixed(4);
+        document.getElementById("val-r-error-min").innerText = data.r_error_min.toFixed(4);
+        document.getElementById("val-r-error-max").innerText = data.r_error_max.toFixed(4);
+        document.getElementById("val-r-error-avg").innerText = data.r_error_avg.toFixed(4);
+
+        // Correction Error Updates
+        document.getElementById("val-c-error").innerText = data.c_error.toFixed(4);
+        document.getElementById("val-c-error-min").innerText = data.c_error_min.toFixed(4);
+        document.getElementById("val-c-error-max").innerText = data.c_error_max.toFixed(4);
+        document.getElementById("val-c-error-avg").innerText = data.c_error_avg.toFixed(4);
     };
 
     document.getElementById('reset-btn').addEventListener('click', function() {
