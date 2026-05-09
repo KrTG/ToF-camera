@@ -131,7 +131,11 @@ class IcpOdometry:
 
             if attitude is not None and self.anchor_attitude is not None:
                 att_delta = attitude.inv() * self.anchor_attitude
-                init_rt[:3, :3] = att_delta.as_matrix()
+                att_euler = att_delta.as_euler('yxz')
+                # Use pitch/roll from drone, zero-out yaw
+                att_euler[0] = 0
+                att_delta_filtered = Rotation.from_euler('yxz', att_euler)
+                init_rt[:3, :3] = att_delta_filtered.as_matrix()
 
             success, transform = self.icpo.compute2(
                 self.anchor_odometry_frame, odometry_frame, initRt=init_rt
