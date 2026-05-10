@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+
+{% block title %}Kamera ToF - Odtwarzanie: {{ filename }}{% endblock %}
+
+{% block content %}
+<h3>Odtwarzanie: {{ filename }}</h3>
+<img src="{{ url_for('playback_amplitude', filename=filename, _external=True) }}">
+<img src="{{ url_for('playback_depth', filename=filename, _external=True) }}">
+{% endblock %}

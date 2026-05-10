@@ -117,6 +117,8 @@ class TofCamera:
             return frame
 
     def release_frame_raw(self, frame):
+        if hasattr(frame, '__mock__'):
+            return
         if not self.started or not self.cam or not self.range:
             print("Camera not initalized.")
             return

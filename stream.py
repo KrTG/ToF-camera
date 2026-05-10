@@ -1,5 +1,6 @@
 import subprocess
-
+import os
+import glob
 from flask import Flask, make_response, redirect, render_template, Response, url_for
 
 from src.web import streamer
@@ -25,6 +26,48 @@ def reset_odometry():
     with open("/tmp/reset", "w"):
         pass
     return make_response()
+
+@app.route("/recording")
+def recording():
+    return render_template("recording.html")
+
+@app.get("/recording_stream")
+def recording_stream():
+    return Response(streamer.stream_recording(), mimetype='text/event-stream')
+
+@app.post("/recording/start")
+def start_recording():
+    if streamer.recorder_thread is not None:
+        streamer.recorder_thread.start_recording()
+    return make_response()
+
+@app.post("/recording/stop")
+def stop_recording():
+    if streamer.recorder_thread is not None:
+        streamer.recorder_thread.stop_recording()
+    return make_response()
+
+
+@app.route("/playbacks")
+def list_playbacks():
+    recordings = sorted([os.path.basename(f) for f in glob.glob("out/*.replay")])
+    return render_template("playbacks.html", recordings=recordings)
+
+@app.route("/playback/<filename>")
+def playback(filename):
+    return render_template("playback.html", filename=filename)
+
+@app.route("/playback_amplitude/<filename>")
+def playback_amplitude(filename):
+    return Response(
+        streamer.stream_playback_frames(filename, "amplitude"), mimetype="multipart/x-mixed-replace; boundary=frame"
+    )
+
+@app.route("/playback_depth/<filename>")
+def playback_depth(filename):
+    return Response(
+        streamer.stream_playback_frames(filename, "depth"), mimetype="multipart/x-mixed-replace; boundary=frame"
+    )
 
 @app.route("/video")
 def video():

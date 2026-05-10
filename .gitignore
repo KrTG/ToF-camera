@@ -2,6 +2,8 @@
 __pycache__/
 *.py[codz]
 
+src/3d_icpo.py
+
 .env
 out/
 venv/

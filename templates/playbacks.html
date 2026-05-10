@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}Kamera ToF - Lista Nagrań{% endblock %}
+
+{% block content %}
+<h3>Dostępne nagrania</h3>
+<ul>
+    {% for recording in recordings %}
+    <li><a href="{{ url_for('playback', filename=recording) }}">{{ recording }}</a></li>
+    {% endfor %}
+</ul>
+{% endblock %}

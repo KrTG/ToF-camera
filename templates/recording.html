@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Kamera ToF - Nagrywanie{% endblock %}
+
+{% block content %}
+<h3>Status nagrywania</h3>
+<div class="dashboard-container">
+    <table class="data-table">
+        <tr><td>Zapisane klatki:</td><td><span id="val-frames-saved">0</span></td></tr>
+    </table>
+    <br>
+    <button id="toggle-recording" onclick="toggleRecording()" style="padding: 10px; font-size: 16px;">Rozpocznij nagrywanie</button>
+</div>
+
+<script>
+    const source = new EventSource("{{ url_for('recording_stream') }}");
+
+    source.onmessage = function (event) {
+        const data = JSON.parse(event.data);
+        document.getElementById("val-frames-saved").innerText = data.frames_saved;
+    };
+
+    let isRecording = false;
+    function toggleRecording() {
+        isRecording = !isRecording;
+        const btn = document.getElementById('toggle-recording');
+        if (isRecording) {
+            fetch("{{ url_for('start_recording') }}", {method: 'POST'});
+            btn.innerText = 'Zatrzymaj nagrywanie';
+        } else {
+            fetch("{{ url_for('stop_recording') }}", {method: 'POST'});
+            btn.innerText = 'Rozpocznij nagrywanie';
+        }
+    }
+</script>
+{% endblock %}

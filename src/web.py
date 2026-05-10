@@ -2,6 +2,9 @@ from collections import deque
 import enum
 import json
 from statistics import mean
+import os
+import glob
+import pickle
 import threading
 import time
 from typing import Optional, Tuple
@@ -22,6 +25,8 @@ class Algorithm(enum.Enum):
     NONE = 0
     ODOMETRY = 1
     VIDEO = 2
+    RECORDING = 3
+    PLAYBACK = 4
 
 class FrameSaverThread(PipelineThread):
     def __init__(self, camera_thread: PipelineThread, camera: TofCamera):
@@ -52,6 +57,130 @@ class FrameSaverThread(PipelineThread):
         with self.condition:
             return self.cached_frame
 
+
+class MockDepthData:
+    __mock__ = True
+    def __init__(self, depth_data, amplitude_data, confidence_data):
+        self.depth_data = depth_data
+        self.amplitude_data = amplitude_data
+        self.confidence_data = confidence_data
+
+class RecorderThread(PipelineThread):
+    def __init__(self, camera_thread: PipelineThread, camera: TofCamera, filename=None):
+        super().__init__()
+        self.camera_thread = camera_thread
+        self.camera = camera
+        self.frames_saved = 0
+        self.filename_base = filename
+        self.is_recording = False
+        self.f = None
+        self.lock = threading.Lock()
+
+    def start_recording(self):
+        with self.lock:
+            if not self.is_recording:
+                if self.filename_base is None:
+                    os.makedirs("out", exist_ok=True)
+                    existing_files = glob.glob(os.path.join("out", "*.replay"))
+                    max_num = 0
+                    for f in existing_files:
+                        basename = os.path.basename(f)
+                        name, ext = os.path.splitext(basename)
+                        try:
+                            num = int(name)
+                            if num > max_num:
+                                max_num = num
+                        except ValueError:
+                            pass
+                    filename = os.path.join("out", f"{max_num + 1}.replay")
+                else:
+                    filename = self.filename_base
+                self.f = open(filename, "wb")
+                self.frames_saved = 0
+                self.is_recording = True
+
+    def stop_recording(self):
+        with self.lock:
+            if self.is_recording:
+                self.is_recording = False
+                if self.f is not None:
+                    self.f.close()
+                    self.f = None
+
+    def run(self):
+        self.running = True
+        try:
+            while self.running:
+                frame = self.camera_thread.wait_frame()
+                if frame is None:
+                    self.running = False
+                    break
+
+                raw_frame, extra_data = frame
+
+                with self.lock:
+                    if self.is_recording and self.f is not None:
+                        # Save mock frame
+                        mock_frame = MockDepthData(
+                            raw_frame.depth_data,
+                            raw_frame.amplitude_data,
+                            raw_frame.confidence_data
+                        )
+
+                        save_extra_data = extra_data.copy()
+                        if "SYS_STATUS" in save_extra_data:
+                            del save_extra_data["SYS_STATUS"]
+
+                        pickle.dump((mock_frame, save_extra_data), self.f)                        
+                        self.frames_saved += 1
+
+                self.camera.release_frame_raw(raw_frame)
+
+                with self.condition:
+                    self.frame = frame
+                    self.condition.notify()
+        finally:
+            self.stop_recording()
+            with self.condition:
+                self.running = False
+                self.condition.notify_all()
+
+
+class PlayerThread(PipelineThread):
+    def __init__(self, filename: str, delay: float = 0.0):
+        super().__init__()
+        self.filename = filename
+        self.delay = delay
+
+    def run(self):
+        self.running = True
+        try:
+            with open(self.filename, "rb") as f:
+                while self.running:
+                    try:
+                        frame = pickle.load(f)
+
+                        with self.condition:                            
+                            self.frame = frame
+                            self.condition.notify()                                                
+
+                        if self.delay > 0:
+                            time.sleep(self.delay)
+                    except EOFError:
+                        print("Player: Reached end of recording")
+                        self.running = False                        
+                        break
+                    except Exception as e:
+                        print(f"Player error: {e}")
+                        self.running = False
+                        break
+        except FileNotFoundError:
+            print(f"Player: Recording file {self.filename} not found.")
+            self.running = False
+        finally:
+            with self.condition:
+                self.running = False
+                self.condition.notify_all()
 
 class OdometrySaverThread(PipelineThread):
     def __init__(self, compute_thread: PipelineThread):
@@ -104,7 +233,7 @@ class OdometrySaverThread(PipelineThread):
                         "roll": roll,
                         "pitch": pitch,
                         "yaw": yaw,
-                        "voltage": times.get["SYS_STATUS"].voltage_battery / 1000 / 4 if "SYS_STATUS" in times else 0,
+                        "voltage": times.get("SYS_STATUS").voltage_battery / 1000 / 4 if "SYS_STATUS" in times else 0,
                         "t_error": times["t_error"],
                         "r_error": times["r_error"],
                         "t_error_min": min(self.t_errors),
@@ -132,24 +261,30 @@ class WatchdogThread(threading.Thread):
         self.streamer = streamer
         self.timeout = timeout
 
-        self.running = False
+        self.running = True
         self.lock = threading.Lock()
         self.watchdog_timer = time.monotonic()
 
     def run(self):
         while True:
+            time.sleep(1)
             with self.lock:
+                if not self.running:
+                    return
                 if (time.monotonic() - self.watchdog_timer) > self.timeout:
                     print(f"No ping for {self.timeout} seconds. Shutting down the threads.")
                     with self.streamer.camera_lock:
-                        self.running = False
-                        self.streamer.cleanup()
+                        if self.streamer.watchdog_thread == self:
+                            self.streamer.cleanup()
                         return
-            time.sleep(1)
 
     def ping(self):
         with self.lock:
             self.watchdog_timer = time.monotonic()
+
+    def stop(self):
+        with self.lock:
+            self.running = False
 
 class Streamer:
     def __init__(self):
@@ -162,6 +297,8 @@ class Streamer:
         self.compute_thread = None
         self.odometry_saver_thread = None
         self.watchdog_thread = None
+        self.recorder_thread = None
+        self.player_thread = None
         self.camera_lock = threading.Lock()
 
         self.algorithm = Algorithm.NONE
@@ -195,6 +332,46 @@ class Streamer:
         self.frame_saver_thread = None
         self.camera_thread = None
         self.camera = None
+
+    def start_recording(self):
+        mav_connection = mav.get_connection()
+        heartbeat = mav_connection.wait_heartbeat(timeout=3)
+        if heartbeat is None:
+            raise RuntimeError("Recording needs a mavlink connection.")
+        else:
+            self.mav_connection = mav_connection
+            mav.Commander(mav_connection).set_message_interval(
+                mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE_QUATERNION, 6500
+            )  # 150 FPS
+
+        if self.watchdog_thread is None:
+            self.watchdog_thread = WatchdogThread(self)
+            self.watchdog_thread.start()
+
+        self.camera = TofCamera(frame_timeout=0)
+        self.camera_thread = CameraThread(self.camera, mav_connection=self.mav_connection)
+        self.camera.start()
+        self.camera_thread.start()
+
+        self.recorder_thread = RecorderThread(self.camera_thread, self.camera)
+        self.recorder_thread.start()
+
+    def cleanup_recording(self):
+        if self.camera_thread is not None:
+            self.camera_thread.stop()
+            self.camera_thread.join()
+        if self.mav_connection is not None:
+            self.mav_connection.close()
+        if self.camera is not None:
+            self.camera.stop()
+        if self.recorder_thread is not None:
+            self.recorder_thread.stop()
+            self.recorder_thread.join()
+
+        self.camera_thread = None
+        self.camera = None
+        self.recorder_thread = None
+        self.mav_connection = None
 
     def start_odometry(self):
         mav_connection = mav.get_connection()
@@ -251,31 +428,53 @@ class Streamer:
         self.compute_thread = None
         self.odometry_saver_thread = None
 
+    def start_playback(self, filename, delay: float = 0.0):
+        if self.watchdog_thread is None:
+            self.watchdog_thread = WatchdogThread(self)
+            self.watchdog_thread.start()
+
+        self.camera = TofCamera()
+        self.camera.started = True # Enable conversion methods without HW access
+
+        self.player_thread = PlayerThread(filename, delay=delay)
+        self.player_thread.start()
+
+    def cleanup_playback(self):
+        if self.player_thread is not None:
+            self.player_thread.stop()
+            self.player_thread.join()
+        self.player_thread = None
+        self.camera = None
+
     def cleanup(self):
         if self.algorithm == Algorithm.VIDEO:
             self.cleanup_video()
         elif self.algorithm == Algorithm.ODOMETRY:
             self.cleanup_odometry()
+        elif self.algorithm == Algorithm.RECORDING:
+            self.cleanup_recording()
+        elif self.algorithm == Algorithm.PLAYBACK:
+            self.cleanup_playback()
 
+        if self.watchdog_thread is not None:
+            self.watchdog_thread.stop()
         self.watchdog_thread = None
         self.algorithm = Algorithm.NONE
 
     def stream_frames(self, image="amplitude"):
         with self.camera_lock:
-            if self.algorithm == Algorithm.ODOMETRY:
-                self.cleanup_odometry()
-                self.algorithm = Algorithm.NONE
-
-            if self.algorithm == Algorithm.NONE:
+            if self.algorithm != Algorithm.VIDEO:
+                self.cleanup()
                 self.start_video()
                 self.algorithm = Algorithm.VIDEO
 
             print(f"Streaming video")
 
+        frame_saver_thread = self.frame_saver_thread
         while True:
-            if self.frame_saver_thread is None:
+            if frame_saver_thread is None or not frame_saver_thread.running:
                 return
-            frame = self.frame_saver_thread.get_frame()
+            frame = frame_saver_thread.get_frame()
             if frame is None:
                 continue
             amplitude, depth = frame
@@ -297,22 +496,87 @@ class Streamer:
 
     def stream_odometry(self):
         with self.camera_lock:
-            if self.algorithm == Algorithm.VIDEO:
-                self.cleanup_video()
-                self.algorithm = Algorithm.NONE
-
-            if self.algorithm == Algorithm.NONE:
+            if self.algorithm != Algorithm.ODOMETRY:
+                self.cleanup()
                 self.start_odometry()
                 self.algorithm = Algorithm.ODOMETRY
             print("Streaming odometry")
 
+        odometry_saver_thread = self.odometry_saver_thread
         while True:
-            if self.odometry_saver_thread is None:
+            if odometry_saver_thread is None or not odometry_saver_thread.running:
                 return
-            frame = self.odometry_saver_thread.get_frame()
+            frame = odometry_saver_thread.get_frame()
             if frame is None:
                 continue
             yield f"data: {json.dumps(frame)}\n\n"
+            if self.watchdog_thread is not None:
+                self.watchdog_thread.ping()
+            time.sleep(0.1)
+
+    def stream_recording(self):
+        with self.camera_lock:
+            if self.algorithm != Algorithm.RECORDING:
+                self.cleanup()
+                self.start_recording()
+                self.algorithm = Algorithm.RECORDING
+            print("Streaming recording events")
+
+        recorder_thread = self.recorder_thread
+        while True:
+            if recorder_thread is None or not recorder_thread.running:
+                return
+
+            yield f"data: {json.dumps({'frames_saved': recorder_thread.frames_saved})}\n\n"
+            if self.watchdog_thread is not None:
+                self.watchdog_thread.ping()
+            time.sleep(0.1)
+
+    def stream_playback_frames(self, filename, image="amplitude"):
+        filename = os.path.join("out", filename)
+        with self.camera_lock:
+            if self.algorithm != Algorithm.PLAYBACK or \
+               self.player_thread is None or \
+               not self.player_thread.running or \
+               self.player_thread.filename != filename:
+                self.cleanup()
+                self.start_playback(filename, delay=0.1)
+                self.algorithm = Algorithm.PLAYBACK
+
+            print(f"Streaming playback: {filename}")
+
+        # Capture current threads to avoid issues if streamer.cleanup() is called
+        player_thread = self.player_thread
+        camera = self.camera
+
+        while True:
+            if player_thread is None or not player_thread.running or camera is None:
+                return
+            
+            frame_data = player_thread.wait_frame()
+            if frame_data is None:
+                continue
+            
+            raw_frame, extra_data = frame_data
+            
+            # Convert raw frame to images
+            amplitude, depth, mask, _ = self.camera.get_frame_rgbd(raw_frame)
+            amplitude_img = self.camera.convert_grayscale(amplitude, mask)
+            depth_img = self.camera.convert_rgb(depth, mask)
+
+            if image == "amplitude":
+                im = amplitude_img
+            elif image == "depth":
+                im = depth_img
+            
+            if im is not None:
+                imgencode = cv2.imencode(".jpg", im)[1]
+                stringData = imgencode.tobytes()
+                output = (
+                    b"--frame\r\n"
+                    b"Content-Type: text/plain\r\n\r\n" + stringData + b"\r\n"
+                )
+                yield output
             if self.watchdog_thread is not None:
                 self.watchdog_thread.ping()
             time.sleep(0.1)
