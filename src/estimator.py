@@ -73,17 +73,12 @@ class CameraThread(PipelineThread):
                     time_post = self.mav_state.times["ATTITUDE_QUATERNION"]
                     att_post = self.mav_state.current_state["ATTITUDE_QUATERNION"]
 
-                amplitude, depth, mask, _time = self.camera.get_frame_rgbd(frame)
-                self.camera.release_frame_raw(frame)
-
                 extra_data = {}
-                extra_data["camera_time"] = _time
-
                 if self.mav_state is not None:
                     extra_data["ROTATION"] = interpolate(att_pre, time_pre, time_frame, att_post, time_post)
                     extra_data["SYS_STATUS"] = self.mav_state.sys_status
 
-                frame = (amplitude, depth, mask, extra_data)
+                frame = (frame, extra_data)
 
                 # We should process this frame
                 with self.condition:
@@ -101,8 +96,48 @@ class CameraThread(PipelineThread):
                 self.running = False
                 self.condition.notify_all()
 
+class PreprocessFrameThread(PipelineThread):
+    def __init__(self, camera_thread: PipelineThread, camera: TofCamera):
+        super().__init__()
+        self.camera_thread = camera_thread
+        self.camera = camera
 
-class PrepareFrameThread(PipelineThread):
+    def run(self):
+        self.running = True
+        try:
+            while self.running:
+
+                frame = self.camera_thread.wait_frame()
+                if frame is None:
+                    self.running = False
+                    break
+
+                raw_frame, extra_data = frame
+
+                amplitude, depth, mask, _time = self.camera.get_frame_rgbd(raw_frame)
+                self.camera.release_frame_raw(raw_frame)
+
+                extra_data["preprocess_time"] = _time
+                frame = (amplitude, depth, mask, extra_data)
+
+                # We should process this frame
+                with self.condition:
+                    if self.pipeline_active:
+                        if self.frame is not None:
+                            print(
+                                "Preprocessor: Next frame ready, while previous was not acquired!"
+                            )
+                            self.running = False
+                            break
+                    self.frame = frame
+                    self.condition.notify()
+        finally:
+            with self.condition:
+                self.running = False
+                self.condition.notify_all()
+
+
+class PrepareCacheThread(PipelineThread):
     def __init__(self, camera_thread: PipelineThread, odometry: IcpOdometry):
         super().__init__()
         self.camera_thread = camera_thread
@@ -215,7 +250,7 @@ def main():
     camera.start()
     odometry = IcpOdometry(camera.get_intrinsic_matrix())
     camera_thread = CameraThread(camera)
-    prepare_frame_thread = PrepareFrameThread(camera_thread, odometry)
+    prepare_frame_thread = PrepareCacheThread(camera_thread, odometry)
     compute_thread = ComputeThread(prepare_frame_thread, odometry)
 
     camera_thread.start()
@@ -227,7 +262,7 @@ def main():
             if frame is None:
                 break
             global_pose, frame_id, times = frame
-            prep_time = times["camera_time"]
+            prep_time = times["preprocess_time"]
             cache_time = times["cache_time"]
             compute_time = times["compute_time"]
 

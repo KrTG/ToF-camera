@@ -11,7 +11,7 @@ from pymavlink import mavutil
 
 from src import mav
 from src.estimator import (CameraThread, ComputeThread, PipelineThread,
-                       PrepareFrameThread, get_rotation_degrees,
+                       PrepareCacheThread, PreprocessFrameThread, get_rotation_degrees,
                        get_translation)
 from src import conf
 from src.icpo import IcpOdometry
@@ -24,7 +24,7 @@ class Algorithm(enum.Enum):
     VIDEO = 2
 
 class FrameSaverThread(PipelineThread):
-    def __init__(self, camera_thread: CameraThread, camera: TofCamera):
+    def __init__(self, camera_thread: PipelineThread, camera: TofCamera):
         super().__init__()
         self.camera_thread = camera_thread
         self.camera = camera
@@ -75,7 +75,7 @@ class OdometrySaverThread(PipelineThread):
                     break
 
                 pose, frame_id, times = frame
-                self.prep_times.append(times["camera_time"])
+                self.prep_times.append(times["preprocess_time"])
                 self.cache_times.append(times["cache_time"])
                 self.compute_times.append(times["compute_time"])
                 self.t_errors.append(times["t_error"])
@@ -86,7 +86,7 @@ class OdometrySaverThread(PipelineThread):
                     roll, pitch, yaw = get_rotation_degrees(pose)
                     frame = {
                         "time_budget": conf.FRAME_DIV * 33,
-                        "prep_time": times["camera_time"] / 1000000,
+                        "prep_time": times["preprocess_time"] / 1000000,
                         "cache_time": times["cache_time"] / 1000000,
                         "compute_time": times["compute_time"] / 1000000,
                         "prep_time_min": min(self.prep_times) / 1000000,
@@ -104,7 +104,7 @@ class OdometrySaverThread(PipelineThread):
                         "roll": roll,
                         "pitch": pitch,
                         "yaw": yaw,
-                        "voltage": times["SYS_STATUS"].voltage_battery / 1000 / 4,
+                        "voltage": times.get["SYS_STATUS"].voltage_battery / 1000 / 4 if "SYS_STATUS" in times else 0,
                         "t_error": times["t_error"],
                         "r_error": times["r_error"],
                         "t_error_min": min(self.t_errors),
@@ -156,8 +156,9 @@ class Streamer:
         self.camera = None
         self.mav_connection = None
         self.camera_thread = None
+        self.preprocess_frame_thread = None
         self.frame_saver_thread = None
-        self.prepare_frame_thread = None
+        self.prepare_cache_thread = None
         self.compute_thread = None
         self.odometry_saver_thread = None
         self.watchdog_thread = None
@@ -174,7 +175,9 @@ class Streamer:
         self.camera_thread = CameraThread(self.camera)
         self.camera.start()
         self.camera_thread.start()
-        self.frame_saver_thread = FrameSaverThread(self.camera_thread, self.camera)
+        self.preprocess_frame_thread = PreprocessFrameThread(self.camera_thread, self.camera)
+        self.preprocess_frame_thread.start()
+        self.frame_saver_thread = FrameSaverThread(self.preprocess_frame_thread, self.camera)
         self.frame_saver_thread.start()
 
     def cleanup_video(self):
@@ -183,6 +186,9 @@ class Streamer:
             self.camera_thread.join()
         if self.camera is not None:
             self.camera.stop()
+        if self.preprocess_frame_thread is not None:
+            self.preprocess_frame_thread.stop()
+            self.preprocess_frame_thread.join()
         if self.frame_saver_thread is not None:
             self.frame_saver_thread.stop()
             self.frame_saver_thread.join()
@@ -207,12 +213,14 @@ class Streamer:
         self.camera_thread = CameraThread(self.camera, mav_connection=self.mav_connection)
         self.camera.start()
         self.camera_thread.start()
+        self.preprocess_frame_thread = PreprocessFrameThread(self.camera_thread, self.camera)
+        self.preprocess_frame_thread.start()
         self.odometry = IcpOdometry(self.camera.get_intrinsic_matrix())
-        self.prepare_frame_thread = PrepareFrameThread(self.camera_thread, self.odometry)
-        self.compute_thread = ComputeThread(self.prepare_frame_thread, self.odometry)
+        self.prepare_cache_thread = PrepareCacheThread(self.preprocess_frame_thread, self.odometry)
+        self.compute_thread = ComputeThread(self.prepare_cache_thread, self.odometry)
         self.odometry_saver_thread = OdometrySaverThread(self.compute_thread)
 
-        self.prepare_frame_thread.start()
+        self.prepare_cache_thread.start()
         self.compute_thread.start()
         self.odometry_saver_thread.start()
 
@@ -224,9 +232,12 @@ class Streamer:
             self.mav_connection.close()
         if self.camera is not None:
             self.camera.stop()
-        if self.prepare_frame_thread is not None:
-            self.prepare_frame_thread.stop()
-            self.prepare_frame_thread.join()
+        if self.preprocess_frame_thread is not None:
+            self.preprocess_frame_thread.stop()
+            self.preprocess_frame_thread.join()
+        if self.prepare_cache_thread is not None:
+            self.prepare_cache_thread.stop()
+            self.prepare_cache_thread.join()
         if self.compute_thread is not None:
             self.compute_thread.stop()
             self.compute_thread.join()
@@ -236,7 +247,7 @@ class Streamer:
 
         self.camera_thread = None
         self.camera = None
-        self.prepare_frame_thread = None
+        self.prepare_cache_thread = None
         self.compute_thread = None
         self.odometry_saver_thread = None
 

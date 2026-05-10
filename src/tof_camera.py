@@ -1,6 +1,4 @@
-import threading
 import time
-from unittest import result
 
 import cv2
 import numpy as np
@@ -13,7 +11,7 @@ WHITE = (255, 255, 255)
 
 
 class TofCamera:
-    def __init__(self, range=conf.RANGE, frame_timeout=200, scale=1):
+    def __init__(self, range=conf.RANGE, frame_timeout=200, scale=conf.FRAME_SCALE):
         self.cam = None
         self.range = range
         self.frame_timeout = frame_timeout

@@ -1,5 +1,6 @@
 RANGE=2000  # milimeters
 
+FRAME_SCALE = 1
 FRAME_DIV = 3
 
 ICPO_CONFIDENCE=30
