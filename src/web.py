@@ -131,7 +131,7 @@ class RecorderThread(PipelineThread):
                         if "SYS_STATUS" in save_extra_data:
                             del save_extra_data["SYS_STATUS"]
 
-                        pickle.dump((mock_frame, save_extra_data), self.f)                        
+                        pickle.dump((mock_frame, save_extra_data), self.f)
                         self.frames_saved += 1
 
                 self.camera.release_frame_raw(raw_frame)
@@ -160,15 +160,15 @@ class PlayerThread(PipelineThread):
                     try:
                         frame = pickle.load(f)
 
-                        with self.condition:                            
+                        with self.condition:
                             self.frame = frame
-                            self.condition.notify()                                                
+                            self.condition.notify()
 
                         if self.delay > 0:
                             time.sleep(self.delay)
                     except EOFError:
                         print("Player: Reached end of recording")
-                        self.running = False                        
+                        self.running = False
                         break
                     except Exception as e:
                         print(f"Player error: {e}")
@@ -456,9 +456,6 @@ class Streamer:
         elif self.algorithm == Algorithm.PLAYBACK:
             self.cleanup_playback()
 
-        if self.watchdog_thread is not None:
-            self.watchdog_thread.stop()
-        self.watchdog_thread = None
         self.algorithm = Algorithm.NONE
 
     def stream_frames(self, image="amplitude"):
@@ -545,20 +542,16 @@ class Streamer:
 
             print(f"Streaming playback: {filename}")
 
-        # Capture current threads to avoid issues if streamer.cleanup() is called
-        player_thread = self.player_thread
-        camera = self.camera
-
         while True:
-            if player_thread is None or not player_thread.running or camera is None:
+            if self.player_thread is None or not self.player_thread.running or self.camera is None:
                 return
-            
-            frame_data = player_thread.wait_frame()
+
+            frame_data = self.player_thread.wait_frame()
             if frame_data is None:
                 continue
-            
+
             raw_frame, extra_data = frame_data
-            
+
             # Convert raw frame to images
             amplitude, depth, mask, _ = self.camera.get_frame_rgbd(raw_frame)
             amplitude_img = self.camera.convert_grayscale(amplitude, mask)
@@ -568,7 +561,7 @@ class Streamer:
                 im = amplitude_img
             elif image == "depth":
                 im = depth_img
-            
+
             if im is not None:
                 imgencode = cv2.imencode(".jpg", im)[1]
                 stringData = imgencode.tobytes()
