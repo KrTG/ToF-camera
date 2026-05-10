@@ -4,9 +4,15 @@
 
 {% block content %}
 <h3>Dostępne nagrania</h3>
-<ul>
-    {% for recording in recordings %}
-    <li><a href="{{ url_for('playback', filename=recording) }}">{{ recording }}</a></li>
-    {% endfor %}
-</ul>
+<div style="max-height: 80vh; overflow-y: auto;">
+    <ul style="list-style: none; padding: 0;">
+        {% for recording in recordings %}
+        <li style="margin-bottom: 10px; border-bottom: 1px solid #444; padding-bottom: 5px;">
+            <a href="{{ url_for('playback', filename=recording) }}" style="text-decoration: none; color: #007bff; font-family: monospace;">
+                {{ recording }}
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
 {% endblock %}

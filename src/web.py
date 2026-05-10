@@ -530,7 +530,10 @@ class Streamer:
             time.sleep(0.1)
 
     def stream_playback_frames(self, filename, image="amplitude"):
-        filename = os.path.join("out", filename)
+        # Ensure the filename is within out or test for safety
+        if not (filename.startswith("out/") or filename.startswith("test/")):
+             # If it doesn't start with out/ or test/, maybe it's just a filename in out/ (backward compatibility)
+             filename = os.path.join("out", filename)
         with self.camera_lock:
             if self.algorithm != Algorithm.PLAYBACK or \
                self.player_thread is None or \

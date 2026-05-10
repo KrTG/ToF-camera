@@ -50,20 +50,28 @@ def stop_recording():
 
 @app.route("/playbacks")
 def list_playbacks():
-    recordings = sorted([os.path.basename(f) for f in glob.glob("out/*.replay")])
+    recordings = []
+    for base in ["out", "test"]:
+        if os.path.exists(base):
+            for root, dirs, files in os.walk(base):
+                for f in files:
+                    if f.endswith(".replay"):
+                        full_path = os.path.join(root, f)
+                        recordings.append(full_path)
+    recordings.sort()
     return render_template("playbacks.html", recordings=recordings)
 
-@app.route("/playback/<filename>")
+@app.route("/playback/<path:filename>")
 def playback(filename):
     return render_template("playback.html", filename=filename)
 
-@app.route("/playback_amplitude/<filename>")
+@app.route("/playback_amplitude/<path:filename>")
 def playback_amplitude(filename):
     return Response(
         streamer.stream_playback_frames(filename, "amplitude"), mimetype="multipart/x-mixed-replace; boundary=frame"
     )
 
-@app.route("/playback_depth/<filename>")
+@app.route("/playback_depth/<path:filename>")
 def playback_depth(filename):
     return Response(
         streamer.stream_playback_frames(filename, "depth"), mimetype="multipart/x-mixed-replace; boundary=frame"
