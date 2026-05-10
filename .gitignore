@@ -7,3 +7,5 @@ src/3d_icpo.py
 .env
 out/
 venv/
+
+*.replay
