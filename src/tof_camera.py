@@ -156,6 +156,7 @@ class TofCamera:
                 interpolation=cv2.INTER_AREA,
         )
         amplitude = cv2.convertScaleAbs(amplitude, alpha=alpha)
+        amplitude = cv2.medianBlur(amplitude, 3)
         amplitude = self.clahe.apply(amplitude)
         return amplitude
 
