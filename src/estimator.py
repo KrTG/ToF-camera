@@ -197,7 +197,7 @@ class ComputeThread(PipelineThread):
                     break
 
                 odometry_frame, extra_data = frame
-                pose, _time, t_error, r_error = self.odometry.compute_frame(odometry_frame, extra_data.get("ROTATION"))
+                pose, _, _time, t_error, r_error = self.odometry.compute_frame(odometry_frame, extra_data.get("ROTATION"))
                 extra_data["compute_time"] = _time
                 extra_data["t_error"] = t_error
                 extra_data["r_error"] = r_error
