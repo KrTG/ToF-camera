@@ -38,8 +38,6 @@ class TofCamera:
             return
 
         self.cam.setControl(ac.Control.RANGE, self.range)
-        self.cam.setControl(ac.Control.FMT_WIDTH, 120)
-        self.cam.setControl(ac.Control.FMT_HEIGHT, 90)
         self.cam.setControl(ac.Control.AUTO_FRAME_RATE, 0)
 
         info = self.cam.getCameraInfo()
@@ -145,7 +143,7 @@ class TofCamera:
         """
         Returns normalized amplitude data
         """
-        alpha = 0.32  # TODO: Implement adaptive alpha to adjust for lightning conditions
+        alpha = conf.FRAME_AMPLITUDE_BRIGHTNESS
 
         amplitude = frame.amplitude_data
         if self.scale != 1:
@@ -158,7 +156,7 @@ class TofCamera:
                 interpolation=cv2.INTER_AREA,
         )
         amplitude = cv2.convertScaleAbs(amplitude, alpha=alpha)
-        #amplitude = self.clahe.apply(amplitude)
+        amplitude = self.clahe.apply(amplitude)
         return amplitude
 
     def get_frame_mask(self, frame: ac.DepthData):

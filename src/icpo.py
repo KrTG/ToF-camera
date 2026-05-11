@@ -7,7 +7,6 @@ from scipy.linalg import expm, logm
 from scipy.spatial.transform import Rotation
 
 from src import conf
-from src import profileit
 
 
 def fast_inversion(transform):
@@ -51,16 +50,18 @@ class IcpOdometry:
             minGradientMagnitudes=gradient_magnitudes,
             transformType=4,  # Default
         )
-        print("----ICPO SETTINGS----")
-        print(f"Camera matrix: {self.icpo.getCameraMatrix()}")
-        print(f"Min depth: {self.icpo.getMinDepth()}")
-        print(f"Max depth: {self.icpo.getMaxDepth()}")
-        print(f"Max depth diff: {self.icpo.getMaxDepthDiff()}")
-        print(f"Max points part: {self.icpo.getMaxPointsPart()}")
-        print(f"Iter counts: {self.icpo.getIterationCounts()}")
-        print(f"Min gradient magnitudes: {self.icpo.getMinGradientMagnitudes()}")
-        print(f"Transform type: {self.icpo.getTransformType()}")
-        print("--------")
+
+        if conf.DEBUG:
+            print("----ICPO SETTINGS----")
+            print(f"Camera matrix: {self.icpo.getCameraMatrix()}")
+            print(f"Min depth: {self.icpo.getMinDepth()}")
+            print(f"Max depth: {self.icpo.getMaxDepth()}")
+            print(f"Max depth diff: {self.icpo.getMaxDepthDiff()}")
+            print(f"Max points part: {self.icpo.getMaxPointsPart()}")
+            print(f"Iter counts: {self.icpo.getIterationCounts()}")
+            print(f"Min gradient magnitudes: {self.icpo.getMinGradientMagnitudes()}")
+            print(f"Transform type: {self.icpo.getTransformType()}")
+            print("--------")
 
         self.anchor_odometry_frame: OdometryFrame | None = None
         self.anchor_attitude: Rotation | None = None
@@ -115,6 +116,8 @@ class IcpOdometry:
         r_error_deg = 0
         _start_time = time.monotonic_ns()
 
+        locked_frames = 0
+
         attitude = None
         if rotation is not None:
             attitude = rotation
@@ -141,6 +144,7 @@ class IcpOdometry:
                 self.anchor_odometry_frame, odometry_frame, initRt=init_rt
             )
             if success:
+                locked_frames = self.skipped_frames + 1
                 self.global_pose @= fast_inversion(transform)
 
                 prediction_error = transform @ fast_inversion(init_rt)
@@ -164,12 +168,14 @@ class IcpOdometry:
                     self.skipped_frames = 0
             else:
                 self.skipped_frames += 1
-                print(f"Skipped frames: {self.skipped_frames}")
-                if self.skipped_frames > 2:
-                    print("Lost tracking. Re-set using linear prediction.")
+                if conf.DEBUG:
+                    print(f"Skipped frames: {self.skipped_frames}")
+                if self.skipped_frames > conf.ICPO_MAX_SKIP:
+                    if conf.DEBUG:
+                        print("Lost tracking. Re-set using linear prediction.")
                     # Apply the 'guess' as the real prediction since we lost tracking
                     # and it's the best compromise
-                    self.global_pose @= init_rt
+                    self.global_pose @= fast_inversion(init_rt)
                     self.anchor_odometry_frame = odometry_frame
                     if attitude is not None:
                         self.anchor_attitude = attitude
@@ -180,17 +186,7 @@ class IcpOdometry:
             if attitude is not None:
                 self.anchor_attitude = attitude
         pose = self.rdf_to_frd_transform @ self.global_pose @ self.final_transform
-        return pose, time.monotonic_ns() - _start_time, t_error, r_error_deg
-
-    def next_frame(self, amplitude, depth, mask, frame_id):
-        _start_time = time.monotonic_ns()
-        current_odometry_frame, _prep_time = self.prepare_frame(
-            amplitude, depth, mask, frame_id
-        )
-        pose, _compute_time, _, _, = self.compute_frame(current_odometry_frame)
-        _total_time = time.monotonic_ns() - _start_time
-
-        return (pose, _total_time, _prep_time, _compute_time)
+        return pose, locked_frames, time.monotonic_ns() - _start_time, t_error, r_error_deg
 
     def reset_position(self):
         self.global_pose = np.eye(4, dtype=np.float64)
