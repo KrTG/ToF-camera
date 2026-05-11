@@ -182,6 +182,7 @@ class IcpOdometry:
                     self.skipped_frames = 0
                     self.previous_transform = np.eye(4, dtype=np.float64)
         else:
+            locked_frames += 1
             self.anchor_odometry_frame = odometry_frame
             if attitude is not None:
                 self.anchor_attitude = attitude

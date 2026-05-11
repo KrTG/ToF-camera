@@ -99,6 +99,24 @@ def test_loop(filename):
     print(f"\tsucceeded:\t\t{success}")
     print(f"\tloop_distance:\t\t{np.linalg.norm(translations[-1] - translations[0]):.3f}")
 
+def test_rotation(filename):
+    poses, success = get_poses(filename)
+
+    translations = [pose[:3, 3] for pose in poses]
+    drifts = [np.linalg.norm(translations[i] - translations[i - 1]) for i in range(1, len(translations))]
+
+    print(f"Rotation test {filename} results:")
+    print(f"\tframes:\t\t{len(poses)}")
+    print(f"\tsucceeded:\t\t{success}")
+    print(f"\tmax_step:\t\t{max(drifts):.3f}")
+    print(f"\tavg_step:\t\t{sum(drifts) / len(drifts):.3f}")
+    print(f"\tstd_step:\t\t{np.std(drifts):.3f}")
+    print(f"\tloop_distance:\t\t{np.linalg.norm(translations[-1] - translations[0]):.3f}")
+    print(f"\tloop_distance_X:\t\t{np.linalg.norm(translations[-1][0] - translations[0][0]):.3f}")
+    print(f"\tloop_distance_Y:\t\t{np.linalg.norm(translations[-1][1] - translations[0][1]):.3f}")
+    print(f"\tloop_distance_Z:\t\t{np.linalg.norm(translations[-1][2] - translations[0][2]):.3f}")
+
+
 
 if __name__ == "__main__":
     import argparse
@@ -121,6 +139,8 @@ if __name__ == "__main__":
             f = test_translation_xy
         elif suite.name == "loop":
             f = test_loop
+        elif suite.name.startswith("rotation"):
+            f = test_rotation
         else:
             continue
 
