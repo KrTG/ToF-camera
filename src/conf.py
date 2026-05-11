@@ -1,3 +1,5 @@
+DEBUG=0
+
 RANGE=2000  # milimeters
 
 FRAME_SCALE = 1
