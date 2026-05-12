@@ -15,7 +15,7 @@ def get_poses(test_filename, external_rotation=True):
 
     intrinsic_matrix = np.array([
         [190.92, 0, 120.00],
-        [0, 19.125, 90.00],
+        [0, 190.125, 90.00],
         [0, 0, 1]
     ])
     poses = []
