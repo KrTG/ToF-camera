@@ -159,7 +159,8 @@ class PrepareCacheThread(PipelineThread):
                     amplitude, depth, mask, self.frame_counter, extra_data.get("ROTATION")
                 )
                 extra_data["cache_time"] = _time
-                frame = (odometry_frame, extra_data)
+
+                frame = (amplitude, depth, mask, odometry_frame, extra_data)
 
                 self.frame_counter += 1
 
@@ -196,8 +197,10 @@ class ComputeThread(PipelineThread):
                     self.running = False
                     break
 
-                odometry_frame, extra_data = frame
-                pose, _, _time, t_error, r_error = self.odometry.compute_frame(odometry_frame, extra_data.get("ROTATION"))
+                amplitude, depth, mask, odometry_frame, extra_data = frame
+                pose, _, _time, t_error, r_error = self.odometry.compute_frame(
+                    amplitude, depth, mask, odometry_frame, extra_data.get("ROTATION")
+                )
                 extra_data["compute_time"] = _time
                 extra_data["t_error"] = t_error
                 extra_data["r_error"] = r_error
