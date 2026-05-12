@@ -156,7 +156,7 @@ class PrepareCacheThread(PipelineThread):
 
                 amplitude, depth, mask, extra_data = frame
                 odometry_frame, _time = self.odometry.prepare_frame(
-                    amplitude, depth, mask, self.frame_counter
+                    amplitude, depth, mask, self.frame_counter, extra_data.get("ROTATION")
                 )
                 extra_data["cache_time"] = _time
                 frame = (odometry_frame, extra_data)

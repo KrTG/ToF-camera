@@ -20,6 +20,7 @@ def get_poses(test_filename, external_rotation=True):
     ])
     poses = []
     success_count = 0
+    from scipy.spatial.transform import Rotation
     odometry = IcpOdometry(intrinsic_matrix)
     with open(test_filename, "rb") as f:
         frame_idx = 0
@@ -27,12 +28,15 @@ def get_poses(test_filename, external_rotation=True):
             try:
                 frame_data = pickle.load(f)
                 raw_frame, extra_data = frame_data
+
+                rotation = extra_data.get("ROTATION") if external_rotation else None
+                if rotation is None:
+                    rotation = Rotation.identity()
+
                 amplitude, depth, mask, _ = camera.get_frame_rgbd(raw_frame)
-                odometry_frame, _ = odometry.prepare_frame(amplitude, depth, mask, frame_idx)
-                if external_rotation:
-                    pose, locked, _, _, _ = odometry.compute_frame(odometry_frame, extra_data.get("ROTATION"))
-                else:
-                    pose, locked, _, _, _ = odometry.compute_frame(odometry_frame)
+                odometry_frame, _ = odometry.prepare_frame(amplitude, depth, mask, frame_idx, rotation)
+                pose, locked, _, _, _ = odometry.compute_frame(amplitude, depth, mask, odometry_frame, rotation)
+
                 poses.append(pose)
                 success_count += locked
                 frame_idx += 1
@@ -104,6 +108,8 @@ def test_rotation(filename):
 
     translations = [pose[:3, 3] for pose in poses]
     drifts = [np.linalg.norm(translations[i] - translations[i - 1]) for i in range(1, len(translations))]
+    #for t in translations:
+    #    print(t)
 
     print(f"Rotation test {filename} results:")
     print(f"\tframes:\t\t{len(poses)}")
