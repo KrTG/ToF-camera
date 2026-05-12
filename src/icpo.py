@@ -137,7 +137,6 @@ class IcpOdometry:
 
         if self.anchor_odometry_frame is not None and self.anchor_attitude is not None:
             relative_attitude = self.anchor_attitude.inv() * attitude
-            #relative_attitude = attitude.inv() * self.anchor_attitude
 
             T_warp = np.eye(4, dtype=np.float32)
             T_warp[:3, :3] = relative_attitude.as_matrix().astype(np.float32)
