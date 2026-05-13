@@ -10,7 +10,7 @@ def get_test_info(readme_path):
         content = f.read().strip()
     return content
 
-def get_poses(test_filename, external_rotation=True):
+def get_poses(test_filename):
     camera = TofCamera()
 
     intrinsic_matrix = np.array([
@@ -20,25 +20,24 @@ def get_poses(test_filename, external_rotation=True):
     ])
     poses = []
     success_count = 0
-    from scipy.spatial.transform import Rotation
     odometry = IcpOdometry(intrinsic_matrix)
+    anchor_frame = None
     with open(test_filename, "rb") as f:
         frame_idx = 0
         while True:
             try:
                 frame_data = pickle.load(f)
                 raw_frame, extra_data = frame_data
-
-                rotation = extra_data.get("ROTATION") if external_rotation else None
-                if rotation is None:
-                    rotation = Rotation.identity()
+                rotation = extra_data["ROTATION"]
 
                 amplitude, depth, mask, _ = camera.get_frame_rgbd(raw_frame)
-                odometry_frame, _ = odometry.prepare_frame(amplitude, depth, mask, frame_idx, rotation)
-                pose, locked, _, _, _ = odometry.compute_frame(amplitude, depth, mask, odometry_frame, rotation)
-
-                poses.append(pose)
-                success_count += locked
+                warped_frame, _ = odometry.prepare_warped_frame(amplitude, depth, mask, frame_idx, rotation)
+                if anchor_frame is not None and warped_frame is not None:
+                    pose, locked, _, = odometry.compute_frame(anchor_frame, warped_frame, rotation)
+                    #print(locked)
+                    poses.append(pose)
+                    success_count += locked
+                anchor_frame, _ = odometry.prepare_regular_frame(amplitude, depth, mask, frame_idx)
                 frame_idx += 1
             except EOFError:
                 break

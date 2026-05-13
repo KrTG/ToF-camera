@@ -144,6 +144,8 @@ class PrepareCacheThread(PipelineThread):
         self.odometry = odometry
 
         self.frame_counter = 0
+        self.anchor_frame = None
+        self.anchor_calculation_time = 0
 
     def run(self):
         self.running = True
@@ -155,25 +157,27 @@ class PrepareCacheThread(PipelineThread):
                     break
 
                 amplitude, depth, mask, extra_data = frame
-                odometry_frame, _time = self.odometry.prepare_frame(
-                    amplitude, depth, mask, self.frame_counter, extra_data.get("ROTATION")
+                warped_frame, _time = self.odometry.prepare_warped_frame(
+                    amplitude, depth, mask, self.frame_counter, extra_data["ROTATION"]
                 )
-                extra_data["cache_time"] = _time
+                extra_data["cache_time"] = self.anchor_calculation_time + _time
+                if self.anchor_frame is not None:
+                    frame = (self.anchor_frame, warped_frame, extra_data)
 
-                frame = (amplitude, depth, mask, odometry_frame, extra_data)
+                    with self.condition:
+                        if self.frame is not None:
+                            print(
+                                "Prepare: Next frame ready, while previous was not acquired!"
+                            )
+                            self.running = False
+                            break
 
+                        self.frame = frame
+                        self.condition.notify()
+                self.anchor_frame, self.anchor_calculation_time = self.odometry.prepare_regular_frame(
+                    amplitude, depth, mask, self.frame_counter
+                )
                 self.frame_counter += 1
-
-                with self.condition:
-                    if self.frame is not None:
-                        print(
-                            "Prepare: Next frame ready, while previous was not acquired!"
-                        )
-                        self.running = False
-                        break
-
-                    self.frame = frame
-                    self.condition.notify()
         finally:
             with self.condition:
                 self.running = False
@@ -197,14 +201,12 @@ class ComputeThread(PipelineThread):
                     self.running = False
                     break
 
-                amplitude, depth, mask, odometry_frame, extra_data = frame
-                pose, _, _time, t_error, r_error = self.odometry.compute_frame(
-                    amplitude, depth, mask, odometry_frame, extra_data.get("ROTATION")
+                anchor_frame, warped_frame, extra_data = frame
+                pose, _, _time = self.odometry.compute_frame(
+                    anchor_frame, warped_frame, extra_data["ROTATION"]
                 )
                 extra_data["compute_time"] = _time
-                extra_data["t_error"] = t_error
-                extra_data["r_error"] = r_error
-                frame = (pose, odometry_frame.ID, extra_data)
+                frame = (pose, warped_frame.ID, extra_data)
 
                 if os.path.isfile("/tmp/reset"):
                     os.remove("/tmp/reset")

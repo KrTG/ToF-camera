@@ -65,19 +65,8 @@ class IcpOdometry:
             print(f"Transform type: {self.icpo.getTransformType()}")
             print("--------")
 
-        self.anchor_odometry_frame: OdometryFrame | None = None
         self.anchor_attitude: Rotation | None = None
-        self.previous_transform: np.ndarray = np.eye(
-            4, dtype=np.float64
-        )  # 4x4 transform matrix
-        self.skipped_frames: int = 0
-
-        # Store current frame data as instance attributes
-        self.current_frame_attitude: Rotation | None = None
-        self.current_frame_amplitude: MatLike | None = None
-        self.current_frame_depth: MatLike | None = None
-        self.current_frame_mask: MatLike | None = None
-
+        self.previous_transform: np.ndarray = np.eye(4, dtype=np.float64)
         self.camera_mount_euler = (0, -90, 0) # Camera rotation in the FRD frame - facing down
 
         self.camera_mount_rotation = Rotation.from_euler('xyz', self.camera_mount_euler, degrees=True)
@@ -108,34 +97,15 @@ class IcpOdometry:
 
         self.reset_position()
 
-    def prepare_frame(
-            self, amplitude: MatLike, depth: MatLike, mask: MatLike, frame_id, rotation: Rotation
+    def prepare_warped_frame(
+            self, amplitude: MatLike, depth: MatLike, mask: MatLike, frame_id: int, attitude: Rotation
         ):
         _start_time = time.monotonic_ns()
-
-        # Store raw data for potential warping in compute_frame
-        current_odometry_frame = cv2.rgbd.OdometryFrame.create(
-            amplitude, depth, mask, None, frame_id
-        )
-
-        self.icpo.prepareFrameCache(
-            current_odometry_frame, cv2.rgbd.ODOMETRY_FRAME_CACHE_ALL
-        )
-
-        return current_odometry_frame, time.monotonic_ns() - _start_time
-
-    def compute_frame(self, amplitude: MatLike, depth: MatLike, mask: MatLike, odometry_frame: OdometryFrame, rotation: Rotation):
-        t_error = 0
-        r_error_deg = 0
-        _start_time = time.monotonic_ns()
-
-        locked_frames = 0
-
-        # Current attitude in RDF frame
-        attitude = rotation * self.camera_mount_rotation
-        attitude = self.frd_to_rdf_rotation * attitude * self.frd_to_rdf_rotation_inv
-
-        if self.anchor_odometry_frame is not None and self.anchor_attitude is not None:
+        warped_frame = None
+        if self.anchor_attitude is not None:
+            # Current attitude in RDF frame
+            attitude = attitude * self.camera_mount_rotation
+            attitude = self.frd_to_rdf_rotation * attitude * self.frd_to_rdf_rotation_inv
             relative_attitude = self.anchor_attitude.inv() * attitude
 
             T_warp = np.eye(4, dtype=np.float32)
@@ -153,80 +123,65 @@ class IcpOdometry:
                 T_warp, K, distCoeff,
                 warped_amplitude, warped_depth, warped_mask
             )
-
-            # Create temporary warped frame for ICP
             warped_frame = cv2.rgbd.OdometryFrame.create(
-                warped_amplitude, warped_depth, warped_mask, None, odometry_frame.ID
+                warped_amplitude, warped_depth, warped_mask, None, frame_id
             )
-            self.icpo.prepareFrameCache(warped_frame, cv2.rgbd.ODOMETRY_FRAME_CACHE_ALL)
+            self.icpo.prepareFrameCache(warped_frame, cv2.rgbd.ODOMETRY_FRAME_CACHE_DST)
+        self.anchor_attitude = attitude
+        return warped_frame, time.monotonic_ns() - _start_time
 
-            # Scale the initial transformation by the amount of lost frames
-            # Since we pre-rotate, previous_transform is translation-only
-            init_rt = self.previous_transform.copy()
-            if self.skipped_frames > 0:
-                init_rt = np.linalg.matrix_power(init_rt, self.skipped_frames + 1)
+    def prepare_regular_frame(
+        self, amplitude: MatLike, depth: MatLike, mask: MatLike, frame_id: int
+    ):
+        _start_time = time.monotonic_ns()
+        regular_frame = cv2.rgbd.OdometryFrame.create(
+            amplitude, depth, mask, None, frame_id
+        )
+        self.icpo.prepareFrameCache(
+            regular_frame, cv2.rgbd.ODOMETRY_FRAME_CACHE_SRC
+        )
+        return regular_frame, time.monotonic_ns() - _start_time
 
-            # ICP is now translation-only (transformType=2)
-            # Both frames are now aligned to the anchor's orientation
-            success, transform = self.icpo.compute2(
-                self.anchor_odometry_frame, warped_frame, initRt=init_rt
-            )
+    def compute_frame(self, anchor_frame: OdometryFrame, warped_frame: OdometryFrame, attitude: Rotation):
+        """
+        @param anchor_frame: Unwarped previous frame (anchor)
+        @param warped_frame: Current warped frame
+        """
+        assert (warped_frame.ID - anchor_frame.ID) == 1
 
-            if success:
-                locked_frames = self.skipped_frames + 1
-                self.global_pose @= fast_inversion(transform)
+        _start_time = time.monotonic_ns()
+        locked_frames = 0
 
-                prediction_error = transform @ fast_inversion(init_rt)
-                t_error = np.linalg.norm(prediction_error[:3, 3])
-                # r_error_deg should be 0 because transform is translation-only
-                r_error = Rotation.from_matrix(prediction_error[:3, :3])
-                r_error_deg = r_error.magnitude() * (180 / np.pi)
-                assert isinstance(r_error_deg, float)
+        init_rt = self.previous_transform.copy()
 
-                # Update rotation part of the global pose
-                self.global_pose[:3, :3] = attitude.as_matrix()
-
-                self.anchor_odometry_frame = odometry_frame
-                self.anchor_attitude = attitude
-
-                if self.skipped_frames == 0:
-                    self.previous_transform = transform
-                else:
-                    scale = 1.0 / (self.skipped_frames + 1)
-                    self.previous_transform = fractional_se3_power(transform, scale)
-                    self.skipped_frames = 0
-            else:
-                self.skipped_frames += 1
-                if conf.DEBUG:
-                    print(f"Skipped frames: {self.skipped_frames}")
-                if self.skipped_frames > conf.ICPO_MAX_SKIP:
-                    if conf.DEBUG:
-                        print("Lost tracking. Re-set using linear prediction.")
-                    # Apply the 'guess' as the real prediction since we lost tracking
-                    # and it's the best compromise
-                    self.global_pose @= fast_inversion(init_rt)
-                    self.anchor_odometry_frame = odometry_frame
-                    if attitude is not None:
-                        self.anchor_attitude = attitude
-                    self.skipped_frames = 0
-                    self.previous_transform = np.eye(4, dtype=np.float64)
-        else:
+        # ICP is now translation-only (transformType=2)
+        # Both frames are now aligned to the anchor's orientation
+        success, transform = self.icpo.compute2(
+            anchor_frame, warped_frame, initRt=init_rt
+        )
+        if success:
             locked_frames += 1
-            self.anchor_odometry_frame = odometry_frame
-            if attitude is not None:
-                self.anchor_attitude = attitude
+
+            self.global_pose @= fast_inversion(transform)
+            self.global_pose[:3, :3] = attitude.as_matrix()
+
+            self.previous_transform = transform
+        else:
+            if conf.DEBUG:
+                print("Lost tracking. Re-set using linear prediction.")
+            # Apply the 'guess' as the real prediction since we lost tracking
+            # and it's the best compromise
+            self.global_pose @= fast_inversion(init_rt)
+
+            # Either reset or set to init_rt - we choose to reset
+            self.previous_transform = np.eye(4, dtype=np.float64)
+
         pose = self.rdf_to_frd_transform @ self.global_pose @ self.final_transform
-        return pose, locked_frames, time.monotonic_ns() - _start_time, t_error, r_error_deg
+        return pose, locked_frames, time.monotonic_ns() - _start_time
 
     def reset_position(self):
         self.global_pose = np.eye(4, dtype=np.float64)
         cam_rotation_rdf = self.frd_to_rdf_rotation * self.camera_mount_rotation * self.frd_to_rdf_rotation.inv()
         self.global_pose[:3, :3] = cam_rotation_rdf.as_matrix()
-        self.anchor_odometry_frame = None
         self.anchor_attitude = None
         self.previous_transform = np.eye(4, dtype=np.float64)
-        self.skipped_frames = 0
-        self.current_frame_attitude = None
-        self.current_frame_amplitude = None
-        self.current_frame_depth = None
-        self.current_frame_mask = None
