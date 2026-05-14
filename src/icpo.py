@@ -98,14 +98,14 @@ class IcpOdometry:
         self.reset_position()
 
     def prepare_warped_frame(
-            self, amplitude: MatLike, depth: MatLike, mask: MatLike, frame_id: int, attitude: Rotation
+            self, amplitude: MatLike, depth: MatLike, mask: MatLike, frame_id: int, rotation: Rotation
         ):
         _start_time = time.monotonic_ns()
+        # Current attitude in RDF frame
+        attitude = rotation * self.camera_mount_rotation
+        attitude = self.frd_to_rdf_rotation * attitude * self.frd_to_rdf_rotation_inv
         warped_frame = None
         if self.anchor_attitude is not None:
-            # Current attitude in RDF frame
-            attitude = attitude * self.camera_mount_rotation
-            attitude = self.frd_to_rdf_rotation * attitude * self.frd_to_rdf_rotation_inv
             relative_attitude = self.anchor_attitude.inv() * attitude
 
             T_warp = np.eye(4, dtype=np.float32)
@@ -142,7 +142,7 @@ class IcpOdometry:
         )
         return regular_frame, time.monotonic_ns() - _start_time
 
-    def compute_frame(self, anchor_frame: OdometryFrame, warped_frame: OdometryFrame, attitude: Rotation):
+    def compute_frame(self, anchor_frame: OdometryFrame, warped_frame: OdometryFrame, rotation: Rotation):
         """
         @param anchor_frame: Unwarped previous frame (anchor)
         @param warped_frame: Current warped frame
@@ -163,6 +163,8 @@ class IcpOdometry:
             locked_frames += 1
 
             self.global_pose @= fast_inversion(transform)
+            attitude = rotation * self.camera_mount_rotation
+            attitude = self.frd_to_rdf_rotation * attitude * self.frd_to_rdf_rotation_inv
             self.global_pose[:3, :3] = attitude.as_matrix()
 
             self.previous_transform = transform
