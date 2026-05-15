@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import pickle
 import numpy as np
+from src import conf
 from src.icpo import IcpOdometry
 from src.tof_camera import TofCamera
 
@@ -14,8 +15,8 @@ def get_poses(test_filename):
     camera = TofCamera()
 
     intrinsic_matrix = np.array([
-        [190.92, 0, 120.00],
-        [0, 190.125, 90.00],
+        [190.92 * conf.FRAME_SCALE, 0, 120.00 * conf.FRAME_SCALE],
+        [0, 190.125 * conf.FRAME_SCALE, 90.00 * conf.FRAME_SCALE],
         [0, 0, 1]
     ])
     poses = []
