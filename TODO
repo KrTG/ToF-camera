@@ -1,0 +1,3 @@
+- Time syncing between offboard computer and the drone for more accurate ATTITUDE_QUATERNION data
+- Pure gyro ATTITUDE estimation - eliminate yaw errors - better performance when yawing, possibly the 'loop' test could go < 1 meter of drift
+- Increase noise rejection - increase max_points_part, increase blur, etc. to stop issue where the drone is standing on a table and the position keeps steadily moving probably following the static noise
