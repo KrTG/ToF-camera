@@ -150,7 +150,6 @@ class IcpOdometry:
         assert (warped_frame.ID - anchor_frame.ID) == 1
 
         _start_time = time.monotonic_ns()
-        locked_frames = 0
 
         init_rt = self.previous_transform.copy()
 
@@ -160,8 +159,6 @@ class IcpOdometry:
             anchor_frame, warped_frame, initRt=init_rt
         )
         if success:
-            locked_frames += 1
-
             self.global_pose @= fast_inversion(transform)
             attitude = rotation * self.camera_mount_rotation
             attitude = self.frd_to_rdf_rotation * attitude * self.frd_to_rdf_rotation_inv
@@ -179,11 +176,10 @@ class IcpOdometry:
             self.previous_transform = np.eye(4, dtype=np.float64)
 
         pose = self.rdf_to_frd_transform @ self.global_pose @ self.final_transform
-        return pose, locked_frames, time.monotonic_ns() - _start_time
+        return pose, success, time.monotonic_ns() - _start_time
 
     def reset_position(self):
         self.global_pose = np.eye(4, dtype=np.float64)
         cam_rotation_rdf = self.frd_to_rdf_rotation * self.camera_mount_rotation * self.frd_to_rdf_rotation.inv()
         self.global_pose[:3, :3] = cam_rotation_rdf.as_matrix()
-        self.anchor_attitude = None
         self.previous_transform = np.eye(4, dtype=np.float64)

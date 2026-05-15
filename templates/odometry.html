@@ -43,6 +43,13 @@
     </table>
 </div>
 
+<h3>Error</h3>
+<div class="dashboard-container">
+    <table class="data-table">
+        <tr><td>Missed frames:</td><td><span id="val-missed-frames">0</span></td></tr>
+    </table>
+</div>
+
 <h3>State</h3>
 <div>Voltage: <span id="val-voltage">0</span></div>
 
@@ -75,6 +82,8 @@
         document.getElementById("val-compute-time-min").innerText = data.compute_time_min.toFixed(0);
         document.getElementById("val-compute-time-max").innerText = data.compute_time_max.toFixed(0);
         document.getElementById("val-compute-time-avg").innerText = data.compute_time_avg.toFixed(0);
+
+        document.getElementById("val-missed-frames").innerText = data.missed_frames.toFixed(0);
 
         // Translation
         document.getElementById("val-x").innerText = data.x.toFixed(2);

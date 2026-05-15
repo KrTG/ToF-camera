@@ -202,10 +202,11 @@ class ComputeThread(PipelineThread):
                     break
 
                 anchor_frame, warped_frame, extra_data = frame
-                pose, _, _time = self.odometry.compute_frame(
+                pose, success, _time = self.odometry.compute_frame(
                     anchor_frame, warped_frame, extra_data["ROTATION"]
                 )
                 extra_data["compute_time"] = _time
+                extra_data["compute_success"] = success
                 frame = (pose, warped_frame.ID, extra_data)
 
                 if os.path.isfile("/tmp/reset"):

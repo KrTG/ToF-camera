@@ -191,6 +191,7 @@ class OdometrySaverThread(PipelineThread):
         self.prep_times = deque(maxlen=100)
         self.cache_times = deque(maxlen=100)
         self.compute_times = deque(maxlen=100)
+        self.missed_frames = 0
 
     def run(self):
         self.running = True
@@ -205,6 +206,7 @@ class OdometrySaverThread(PipelineThread):
                 self.prep_times.append(times["preprocess_time"])
                 self.cache_times.append(times["cache_time"])
                 self.compute_times.append(times["compute_time"])
+                self.missed_frames += 1 if not times["compute_success"] else 0
 
                 if frame_id % 1 == 0:
                     x, y, z = get_translation(pose)
@@ -223,6 +225,7 @@ class OdometrySaverThread(PipelineThread):
                         "compute_time_min": min(self.compute_times) / 1000000,
                         "compute_time_max": max(self.compute_times) / 1000000,
                         "compute_time_avg": mean(self.compute_times) / 1000000,
+                        "missed_frames": self.missed_frames,
                         "x": x,
                         "y": y,
                         "z": z,
