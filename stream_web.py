@@ -19,7 +19,7 @@ def odometry():
 
 @app.get("/odometry_stream")
 def odometry_stream():
-    return Response(streamer.stream_odometry(), mimetype='text/event-stream')
+    return Response(streamer.stream_odometry(), mimetype="text/event-stream")
 
 @app.post("/odometry_reset")
 def reset_odometry():
@@ -33,7 +33,7 @@ def recording():
 
 @app.get("/recording_stream")
 def recording_stream():
-    return Response(streamer.stream_recording(), mimetype='text/event-stream')
+    return Response(streamer.stream_recording(), mimetype="text/event-stream")
 
 @app.post("/recording/start")
 def start_recording():
@@ -108,6 +108,31 @@ def reload_service():
         return redirect(url_for("index"))
     except Exception as e:
         return make_response(str(e), 500)
+
+@app.post("/mav/start")
+def start_mav_service():
+    try:
+        subprocess.run(['sudo', 'systemctl', 'start', 'mav'], check=True)
+        return make_response("MAVLink service started", 200)
+    except Exception as e:
+        return make_response("unavailable", 200)
+
+@app.post("/mav/stop")
+def stop_mav_service():
+    try:
+        subprocess.run(['sudo', 'systemctl', 'stop', 'mav'], check=True)
+        return make_response("MAVLink service stopped", 200)
+    except Exception as e:
+        return make_response("unavailable", 200)
+
+@app.get("/mav/status")
+def get_mav_service_status():
+    try:
+        result = subprocess.run(["systemctl", "is-active", "mav"], capture_output=True, text=True, check=False)
+        status_output = result.stdout.strip()
+        return make_response(status_output, 200)
+    except Exception as e:
+        return make_response("unavailable", 200)
 
 
 if __name__ == "__main__":

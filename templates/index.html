@@ -10,7 +10,62 @@
 </form>
 <form action="{{ url_for('reload_service') }}" method="POST">
     <button class="big_button" type="submit">
-        Reload the service
+        Reload the web service
     </button>
 </form>
+
+<div style="margin-top: 20px; border: 1px solid #ccc; padding: 10px; border-radius: 5px;">
+    <h3>MAVLink Service Control</h3>
+    <p>Status: <span id="mav-status">Loading...</span></p>
+    <form id="mav-toggle-form" method="POST">
+        <button class="big_button" type="submit" id="mav-toggle-button"></button>
+    </form>
+</div>
+
+<script>
+    function updateMavStatus() {
+        fetch("{{ url_for('get_mav_service_status') }}")
+            .then(response => response.text())
+            .then(status => {
+                document.getElementById("mav-status").textContent = status;
+                const toggleButton = document.getElementById("mav-toggle-button");
+                const toggleForm = document.getElementById("mav-toggle-form");
+                if (status === "active") {
+                    toggleButton.textContent = "Stop MAVLink Service";
+                    toggleForm.action = "{{ url_for('stop_mav_service') }}";
+                } else {
+                    toggleButton.textContent = "Start MAVLink Service";
+                    toggleForm.action = "{{ url_for('start_mav_service') }}";
+                }
+            })
+            .catch(error => {
+                console.error("Error fetching MAVLink service status:", error);
+                document.getElementById("mav-status").textContent = "failed";
+                const toggleButton = document.getElementById("mav-toggle-button");
+                toggleButton.textContent = "Service failed";
+                toggleButton.disabled = true; // Disable button on error
+            });
+    }
+
+    document.getElementById("mav-toggle-form").addEventListener("submit", function(event) {
+        event.preventDefault(); // Prevent default form submission
+        const form = event.target;
+        fetch(form.action, { method: "POST" })
+            .then(response => {
+                if (!response.ok) {
+                    console.error("Error toggling MAVLink service:", response.statusText);
+                }
+                updateMavStatus(); // Refresh status after action
+            })
+            .catch(error => {
+                console.error("Network error toggling MAVLink service:", error);
+                updateMavStatus(); // Refresh status even on network error
+            });
+    });
+
+    // Update status every 5 seconds
+    setInterval(updateMavStatus, 5000);
+    // Initial status update
+    updateMavStatus();
+</script>
 {% endblock %}
