@@ -207,7 +207,8 @@ class ComputeThread(PipelineThread):
                 )
                 extra_data["compute_time"] = _time
                 extra_data["compute_success"] = success
-                frame = (pose, warped_frame.ID, extra_data)
+                extra_data["id"] = warped_frame.ID
+                frame = (pose, extra_data)
 
                 if os.path.isfile("/tmp/reset"):
                     os.remove("/tmp/reset")
@@ -229,6 +230,39 @@ class ComputeThread(PipelineThread):
                 self.condition.notify_all()
 
 
+
+class OutputMavlinkThread(PipelineThread):
+    def __init__(self, compute_thread: PipelineThread, mav_connection: mavutil.mavserial):
+        super().__init__()
+        self.compute_thread = compute_thread
+        self.commander = mav.Commander(mav_connection)
+
+    def run(self):
+        self.running = True
+        try:
+            while self.running:
+                # Wait for a new frame from the compute thread
+                frame_data = self.compute_thread.wait_frame()
+                if frame_data is None:
+                    self.running = False
+                    break
+
+                pose, extra_data = frame_data
+                success = extra_data["compute_success"]
+                assert isinstance(success, bool)
+
+                x, y, z = get_translation(pose)
+                qw, qx, qy, qz = get_rotation_quaternion(pose)
+
+                self.commander.odometry(x, y, z, qw, qx, qy, qz)
+
+
+        finally:
+            with self.condition:
+                self.running = False
+                self.condition.notify_all()
+
+
 def get_translation(pose):
     return (pose[0, 3], pose[1, 3], pose[2, 3])
 
@@ -240,61 +274,9 @@ def get_rotation_degrees(pose):
 
     return roll, pitch, yaw
 
-def get_translation_from_vision_frame(pose):
-    return (-pose[2, 3], -pose[0, 3], -pose[1, 3])
+def get_rotation_quaternion(pose):
+    rot_matrix = pose[:3, :3]
+    r = Rotation.from_matrix(rot_matrix)
+    w, x, y, z = r.as_quat(canonical=True, scalar_first=True)
 
-
-def get_rotation_from_vision_frame(pose):
-    yaw = -math.atan2(-pose[2, 0], math.sqrt(pose[2, 1] ** 2 + pose[2, 2] ** 2))
-    roll = -math.atan2(pose[1, 0], pose[0, 0])
-    pitch = -math.atan2(pose[2, 1], pose[2, 2])
-    return roll, pitch, yaw
-
-
-def main():
-    camera = TofCamera(frame_timeout=0)
-    camera.start()
-    odometry = IcpOdometry(camera.get_intrinsic_matrix())
-    camera_thread = CameraThread(camera)
-    prepare_frame_thread = PrepareCacheThread(camera_thread, odometry)
-    compute_thread = ComputeThread(prepare_frame_thread, odometry)
-
-    camera_thread.start()
-    prepare_frame_thread.start()
-    compute_thread.start()
-    try:
-        while True:
-            frame = compute_thread.wait_frame()
-            if frame is None:
-                break
-            global_pose, frame_id, times = frame
-            prep_time = times["preprocess_time"]
-            cache_time = times["cache_time"]
-            compute_time = times["compute_time"]
-
-            if (frame_id + 1) % 50 == 0:
-                print(f"Time budget: {33 * conf.FRAME_DIV} ms")
-                print(f"Pre-processing time: {prep_time / 1000000} ms")
-                print(f"Prepare frame time: {cache_time / 1000000} ms")
-                print(f"Compute odometry time: {compute_time / 1000000} ms")
-
-                x, y, z = get_translation(global_pose)
-                print(f"X (forwards/backwards): {x}")
-                print(f"Y (right/left): {y}")
-                print(f"Z (down/up): {z}")
-                roll, pitch, yaw = get_rotation_degrees(global_pose)
-                print(f"Roll: {roll}")
-                print(f"Pitch: {pitch}")
-                print(f"Yaw: {yaw}")
-
-    finally:
-        camera_thread.running = False
-        prepare_frame_thread.running = False
-        compute_thread.running = False
-        camera_thread.join()
-        prepare_frame_thread.join()
-        compute_thread.join()
-
-
-if __name__ == "__main__":
-    main()
+    return w, x, y, z

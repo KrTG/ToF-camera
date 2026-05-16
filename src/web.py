@@ -202,41 +202,40 @@ class OdometrySaverThread(PipelineThread):
                     self.running = False
                     break
 
-                pose, frame_id, times = frame
-                self.prep_times.append(times["preprocess_time"])
-                self.cache_times.append(times["cache_time"])
-                self.compute_times.append(times["compute_time"])
-                self.missed_frames += 1 if not times["compute_success"] else 0
+                pose, extra_data = frame
+                self.prep_times.append(extra_data["preprocess_time"])
+                self.cache_times.append(extra_data["cache_time"])
+                self.compute_times.append(extra_data["compute_time"])
+                self.missed_frames += 1 if not extra_data["compute_success"] else 0
 
-                if frame_id % 1 == 0:
-                    x, y, z = get_translation(pose)
-                    roll, pitch, yaw = get_rotation_degrees(pose)
-                    frame = {
-                        "time_budget": conf.FRAME_DIV * 33,
-                        "prep_time": times["preprocess_time"] / 1000000,
-                        "cache_time": times["cache_time"] / 1000000,
-                        "compute_time": times["compute_time"] / 1000000,
-                        "prep_time_min": min(self.prep_times) / 1000000,
-                        "prep_time_max": max(self.prep_times) / 1000000,
-                        "prep_time_avg": mean(self.prep_times) / 1000000,
-                        "cache_time_min": min(self.cache_times) / 1000000,
-                        "cache_time_max": max(self.cache_times) / 1000000,
-                        "cache_time_avg": mean(self.cache_times) / 1000000,
-                        "compute_time_min": min(self.compute_times) / 1000000,
-                        "compute_time_max": max(self.compute_times) / 1000000,
-                        "compute_time_avg": mean(self.compute_times) / 1000000,
-                        "missed_frames": self.missed_frames,
-                        "x": x,
-                        "y": y,
-                        "z": z,
-                        "roll": roll,
-                        "pitch": pitch,
-                        "yaw": yaw,
-                        "voltage": times.get("SYS_STATUS").voltage_battery / 1000 / 4 if "SYS_STATUS" in times else 0,
-                    }
+                x, y, z = get_translation(pose)
+                roll, pitch, yaw = get_rotation_degrees(pose)
+                frame = {
+                    "time_budget": conf.FRAME_DIV * 33,
+                    "prep_time": extra_data["preprocess_time"] / 1000000,
+                    "cache_time": extra_data["cache_time"] / 1000000,
+                    "compute_time": extra_data["compute_time"] / 1000000,
+                    "prep_time_min": min(self.prep_times) / 1000000,
+                    "prep_time_max": max(self.prep_times) / 1000000,
+                    "prep_time_avg": mean(self.prep_times) / 1000000,
+                    "cache_time_min": min(self.cache_times) / 1000000,
+                    "cache_time_max": max(self.cache_times) / 1000000,
+                    "cache_time_avg": mean(self.cache_times) / 1000000,
+                    "compute_time_min": min(self.compute_times) / 1000000,
+                    "compute_time_max": max(self.compute_times) / 1000000,
+                    "compute_time_avg": mean(self.compute_times) / 1000000,
+                    "missed_frames": self.missed_frames,
+                    "x": x,
+                    "y": y,
+                    "z": z,
+                    "roll": roll,
+                    "pitch": pitch,
+                    "yaw": yaw,
+                    "voltage": extra_data.get("SYS_STATUS").voltage_battery / 1000 / 4 if "SYS_STATUS" in extra_data else 0,
+                }
 
-                    with self.condition:
-                        self.cached_frame = frame
+                with self.condition:
+                    self.cached_frame = frame
 
         finally:
             pass

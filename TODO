@@ -1,3 +1,19 @@
 - Time syncing between offboard computer and the drone for more accurate ATTITUDE_QUATERNION data
 - Pure gyro ATTITUDE estimation - eliminate yaw errors - better performance when yawing, possibly the 'loop' test could go < 1 meter of drift
 - Increase noise rejection - increase max_points_part, increase blur, etc. to stop issue where the drone is standing on a table and the position keeps steadily moving probably following the static noise
+
+# TODO - Odometry Quality Improvement
+
+## Part 1: Combined Quality Metric (Amplitude + Rolling Average)
+
+- **File: `src/icpo.py`**
+    - [ ] In `prepare_regular_frame`, calculate the *instantaneous* quality score based on the frame's average amplitude and store it.
+  - [ ] Add attributes to the `IcpOdometry` class to manage a rolling average of the quality score (e.g., a `deque`).
+  - [ ] In `compute_frame`, update the rolling average:
+    - If ICP is successful, add the stored instantaneous quality score to the history.
+    - If ICP fails, add a `0` to the history.
+  - [ ] `compute_frame` should return the final, smoothed quality score (the average of the history).
+
+- **File: `src/estimator.py`**
+  - [ ] Update `ComputeThread` to receive the quality score from `odometry.compute_frame`.
+  - [ ] Update `OutputMavlinkThread` to use this new dynamic score in the `ODOMETRY` MAVLink message.

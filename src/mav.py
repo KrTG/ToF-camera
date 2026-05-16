@@ -75,6 +75,24 @@ class Commander:
         print("</MESSAGE INTERVAL>")
         return response.result  # type: ignore
 
+    def odometry(self, x, y, z, qw, qx, qy, qz, quality=100, reset_counter=0):
+        result = self.connection.mav.odometry_send(
+            int(time.time_ns() / 1000),
+            mavutil.mavlink.MAV_FRAME_ODOMETRY_NED,
+            mavutil.mavlink.MAV_FRAME_BODY_FRD,
+            x, y, z,
+            qw, qx, qy, qz,
+            float("nan"), float("nan"), float("nan"),
+            float("nan"), float("nan"), float("nan"),
+            [float("nan")] * 21,
+            [float("nan")] * 21,
+            reset_counter,
+            mavutil.mavlink.MAV_ESTIMATOR_TYPE_VIO,
+            quality
+        )
+
+        return result
+
 
 class StateMonitor:
     def __init__(
