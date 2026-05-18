@@ -57,9 +57,9 @@ class CameraThread(PipelineThread):
 
                 frame = self.camera.get_frame_raw()
                 if self.mav_state is not None:
-                    frame_timestamp = self.mav_state.time_ns() / 1_000_000
+                    time_ns = self.mav_state.time_ns()
                 else:
-                    frame_timestamp = time.monotonic_ns() / 1_000_000
+                    time_ns = time.monotonic_ns()
 
                 if frame is None:
                     continue
@@ -76,8 +76,8 @@ class CameraThread(PipelineThread):
                 extra_data = {}
                 if self.mav_state is not None:
                     extra_data["SYS_STATUS"] = self.mav_state.sys_status
-                    extra_data["rotation"] = interpolate(att_pre, att_post, frame_timestamp)
-                extra_data["frame_timestamp"] = frame_timestamp
+                    extra_data["rotation"] = interpolate(att_pre, att_post, time_ns / 1_000_000)
+                extra_data["frame_timestamp"] = time_ns
                 frame = (frame, extra_data)
 
                 # We should process this frame
@@ -163,6 +163,7 @@ class PrepareCacheThread(PipelineThread):
                     amplitude, depth, mask, self.frame_counter, extra_data["rotation"]
                 )
                 extra_data["cache_time"] = self.anchor_calculation_time + _time
+                extra_data["ID"] = self.frame_counter
                 if self.anchor_frame is not None:
                     frame = (self.anchor_frame, warped_frame, extra_data)
 
@@ -256,9 +257,9 @@ class OutputMavlinkThread(PipelineThread):
                 x, y, z = get_translation(pose)
                 qw, qx, qy, qz = get_rotation_quaternion(pose)
 
-                self.commander.odometry(x, y, z, qw, qx, qy, qz, extra_data["frame_timestamp"])
-
-
+                if extra_data["ID"] % conf.FPS == 0:
+                    self.commander.send_heartbeat()
+                self.commander.odometry(x, y, z, qw, qx, qy, qz, extra_data["frame_timestamp"] // 1000)
         finally:
             with self.condition:
                 self.running = False

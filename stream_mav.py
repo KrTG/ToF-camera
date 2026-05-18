@@ -1,9 +1,11 @@
+import time
+
 from pymavlink import mavutil
 
 from src import mav
 from src.tof_camera import TofCamera
 from src.icpo import IcpOdometry
-from src.estimator import CameraThread, PrepareCacheThread, ComputeThread, OutputMavlinkThread
+from src.estimator import CameraThread, PrepareCacheThread, ComputeThread, OutputMavlinkThread, PreprocessFrameThread
 
 def main():
     mav_connection = mav.get_connection()
@@ -19,18 +21,20 @@ def main():
     camera.start()
     odometry = IcpOdometry(camera.get_intrinsic_matrix())
     camera_thread = CameraThread(camera, mav_connection=mav_connection)
-    prepare_frame_thread = PrepareCacheThread(camera_thread, odometry)
+    preprocess_frame_thread = PreprocessFrameThread(camera_thread, camera)
+    prepare_frame_thread = PrepareCacheThread(preprocess_frame_thread, odometry)
     compute_thread = ComputeThread(prepare_frame_thread, odometry)
     output_thread = OutputMavlinkThread(compute_thread, mav_connection=mav_connection)
 
     camera_thread.start()
+    preprocess_frame_thread.start()
     prepare_frame_thread.start()
     compute_thread.start()
     output_thread.start()
 
     try:
-        while True:
-            pass
+        while output_thread.running:
+            time.sleep(0.01)
     finally:
         camera_thread.running = False
         prepare_frame_thread.running = False

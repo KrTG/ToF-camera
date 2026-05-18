@@ -82,12 +82,13 @@ class Commander:
         return response.result  # type: ignore
 
     def odometry(self, x, y, z, qw, qx, qy, qz, timestamp, quality=100, reset_counter=0):
-        result = self.connection.mav.odometry_send(
+        #print("<ODOMETRY>")
+        self.connection.mav.odometry_send(
             timestamp,
-            mavutil.mavlink.MAV_FRAME_ODOMETRY_NED,
-            mavutil.mavlink.MAV_FRAME_BODY_FRD,
+            mavutil.mavlink.MAV_FRAME_LOCAL_NED,
+            mavutil.mavlink.MAV_FRAME_LOCAL_NED,
             x, y, z,
-            qw, qx, qy, qz,
+            [qw, qx, qy, qz],
             float("nan"), float("nan"), float("nan"),
             float("nan"), float("nan"), float("nan"),
             [float("nan")] * 21,
@@ -96,8 +97,7 @@ class Commander:
             mavutil.mavlink.MAV_ESTIMATOR_TYPE_VIO,
             quality
         )
-
-        return result
+        #print("</ODOMETRY>")
 
 
 class StateMonitor:
