@@ -11,7 +11,8 @@ SERIAL_PORT = "/dev/serial0"
 BAUD_RATE = 921600
 ASYNC_TIMEOUT = 1 / 400 # Should be a bit higher than double the most common message FPS
 TIMESYNC_SMOOTHING_ALPHA = 0.05
-TIMEOUT = 3
+TIMEOUT = 1 / conf.FPS / 2
+LONG_TIMEOUT = 0.5
 SYSTEM_ID = 96
 
 def check_connection():
@@ -72,7 +73,7 @@ class Commander:
         response = None
         while True:
             self.connection.mav.send(interval_message)
-            response = self.connection.recv_match(type="COMMAND_ACK", blocking=True, timeout=1)
+            response = self.connection.recv_match(type="COMMAND_ACK", blocking=True, timeout=LONG_TIMEOUT)
             if response is not None:
                 break
 
@@ -162,13 +163,8 @@ class StateMonitor:
         local_time_sent = time.monotonic_ns()
         self.connection.mav.timesync_send(0, local_time_sent)
 
-        msg = None
-        start_wait = time.monotonic()
-        while (time.monotonic() - start_wait) < TIMEOUT:
-            msg = self.connection.recv_match(type="TIMESYNC", blocking=True, timeout=TIMEOUT)
-            if msg and msg.tc1 and msg.ts1 == local_time_sent:
-                break
-        if msg:
+        msg = self.connection.recv_match(type="TIMESYNC", blocking=True, timeout=TIMEOUT)
+        if msg and msg.tc1 and msg.ts1 == local_time_sent:
             local_time_received = time.monotonic_ns()
 
             rtt = local_time_received - local_time_sent
