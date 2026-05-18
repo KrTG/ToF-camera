@@ -29,7 +29,7 @@ def get_poses(test_filename):
             try:
                 frame_data = pickle.load(f)
                 raw_frame, extra_data = frame_data
-                rotation = extra_data["ROTATION"]
+                rotation = extra_data["rotation"]
 
                 amplitude, depth, mask, _ = camera.get_frame_rgbd(raw_frame)
                 warped_frame, _ = odometry.prepare_warped_frame(amplitude, depth, mask, frame_idx, rotation)

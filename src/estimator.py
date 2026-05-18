@@ -45,7 +45,6 @@ class CameraThread(PipelineThread):
         self.mav_state = None
         if mav_connection:
             self.mav_state = mav.StateMonitor(mav_connection, async_messages=["SYS_STATUS"], sync_messages=["ATTITUDE_QUATERNION"])
-
         self.frame_counter = 0
 
     def run(self):
@@ -54,13 +53,15 @@ class CameraThread(PipelineThread):
             while self.running:
                 if self.mav_state is not None:
                     self.mav_state.update_state()
-                    time_pre = self.mav_state.times["ATTITUDE_QUATERNION"]
                     att_pre = self.mav_state.current_state["ATTITUDE_QUATERNION"]
 
                 frame = self.camera.get_frame_raw()
-                time_frame = time.perf_counter()
+                if self.mav_state is not None:
+                    frame_timestamp = self.mav_state.time_ns() / 1_000_000
+                else:
+                    frame_timestamp = time.monotonic_ns() / 1_000_000
+
                 if frame is None:
-                    time.sleep(0.0001)
                     continue
 
                 self.frame_counter += 1
@@ -70,14 +71,13 @@ class CameraThread(PipelineThread):
 
                 if self.mav_state is not None:
                     self.mav_state.update_state()
-                    time_post = self.mav_state.times["ATTITUDE_QUATERNION"]
                     att_post = self.mav_state.current_state["ATTITUDE_QUATERNION"]
 
                 extra_data = {}
                 if self.mav_state is not None:
-                    extra_data["ROTATION"] = interpolate(att_pre, time_pre, time_frame, att_post, time_post)
                     extra_data["SYS_STATUS"] = self.mav_state.sys_status
-
+                    extra_data["rotation"] = interpolate(att_pre, att_post, frame_timestamp)
+                extra_data["frame_timestamp"] = frame_timestamp
                 frame = (frame, extra_data)
 
                 # We should process this frame
@@ -91,6 +91,8 @@ class CameraThread(PipelineThread):
                             break
                     self.frame = frame
                     self.condition.notify()
+                if self.mav_state is not None:
+                    self.mav_state.timesync()
         finally:
             with self.condition:
                 self.running = False
@@ -158,7 +160,7 @@ class PrepareCacheThread(PipelineThread):
 
                 amplitude, depth, mask, extra_data = frame
                 warped_frame, _time = self.odometry.prepare_warped_frame(
-                    amplitude, depth, mask, self.frame_counter, extra_data["ROTATION"]
+                    amplitude, depth, mask, self.frame_counter, extra_data["rotation"]
                 )
                 extra_data["cache_time"] = self.anchor_calculation_time + _time
                 if self.anchor_frame is not None:
@@ -203,7 +205,7 @@ class ComputeThread(PipelineThread):
 
                 anchor_frame, warped_frame, extra_data = frame
                 pose, success, _time = self.odometry.compute_frame(
-                    anchor_frame, warped_frame, extra_data["ROTATION"]
+                    anchor_frame, warped_frame, extra_data["rotation"]
                 )
                 extra_data["compute_time"] = _time
                 extra_data["compute_success"] = success
@@ -254,7 +256,7 @@ class OutputMavlinkThread(PipelineThread):
                 x, y, z = get_translation(pose)
                 qw, qx, qy, qz = get_rotation_quaternion(pose)
 
-                self.commander.odometry(x, y, z, qw, qx, qy, qz)
+                self.commander.odometry(x, y, z, qw, qx, qy, qz, extra_data["frame_timestamp"])
 
 
         finally:
