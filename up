@@ -5,3 +5,4 @@ scp -r templates $PI_USER@$PI_HOST:/home/$PI_USER/tof-camera
 scp *.py $PI_USER@$PI_HOST:/home/$PI_USER/tof-camera
 scp requirements.txt $PI_USER@$PI_HOST:/home/$PI_USER/tof-camera
 ssh $PI_USER@$PI_HOST sudo systemctl restart cam
+ssh $PI_USER@$PI_HOST sudo systemctl restart mav

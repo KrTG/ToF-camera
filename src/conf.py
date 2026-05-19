@@ -1,4 +1,4 @@
-DEBUG=0
+DEBUG=1
 
 RANGE=2000  # milimeters
 

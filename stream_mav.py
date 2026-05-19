@@ -41,6 +41,7 @@ def main():
         compute_thread.running = False
         output_thread.running = False
         camera_thread.join()
+        preprocess_frame_thread.join()
         prepare_frame_thread.join()
         compute_thread.join()
         output_thread.join()
