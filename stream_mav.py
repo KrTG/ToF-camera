@@ -2,10 +2,13 @@ import time
 
 from pymavlink import mavutil
 
-from src import mav
+from src import conf, mav
 from src.tof_camera import TofCamera
 from src.icpo import IcpOdometry
 from src.estimator import CameraThread, PrepareCacheThread, ComputeThread, OutputMavlinkThread, PreprocessFrameThread
+from src.log import get_logger
+
+logger = get_logger(__name__)
 
 def main():
     mav_connection = mav.get_connection()
@@ -32,9 +35,12 @@ def main():
     compute_thread.start()
     output_thread.start()
 
+    logger.info("Streaming MAVLINK odometry throught UART.")
     try:
         while output_thread.running:
             time.sleep(0.01)
+    except Exception as e:
+        logger.exception("Main thread terminated due to an unhandled exception.")
     finally:
         camera_thread.running = False
         prepare_frame_thread.running = False

@@ -2,7 +2,9 @@ import numpy as np
 from scipy.spatial.transform import Rotation, Slerp
 
 from src import conf
+from src.log import get_logger
 
+logger = get_logger(__name__)
 
 def interpolate(msg_0, msg_1, time_t):
     """
@@ -14,11 +16,11 @@ def interpolate(msg_0, msg_1, time_t):
     rots = Rotation.from_quat([att_0, att_1], scalar_first=True)
     if msg_1.time_boot_ms <= time_t:
         if conf.DEBUG:
-            print(f"{msg_0.time_boot_ms} <= {time_t} <= {msg_1.time_boot_ms}")
+            logger.debug(f"{msg_0.time_boot_ms} <= {time_t} <= {msg_1.time_boot_ms}")
         return rots[1]
     elif msg_0.time_boot_ms >= time_t:
         if conf.DEBUG:
-            print(f"{msg_0.time_boot_ms} <= {time_t} <= {msg_1.time_boot_ms}")
+            logger.debug(f"{msg_0.time_boot_ms} <= {time_t} <= {msg_1.time_boot_ms}")
         return rots[0]
     else:
         times = [msg_0.time_boot_ms, msg_1.time_boot_ms]

@@ -6,6 +6,9 @@ from pymavlink import mavutil
 from serial import Serial
 
 from src import conf
+from src.log import get_logger
+
+logger = get_logger(__name__)
 
 SERIAL_PORT = "/dev/serial0"
 BAUD_RATE = 921600
@@ -31,7 +34,7 @@ def get_connection() -> mavutil.mavserial:
     connection.port.rtscts  = False
     connection.port.dsrdtr  = False
     if conf.DEBUG:
-        print("Loaded MAVLink Version:", connection.WIRE_PROTOCOL_VERSION)
+        logger.debug(f"Loaded MAVLink Version: {connection.WIRE_PROTOCOL_VERSION}")
     return connection
 
 
@@ -42,7 +45,7 @@ class Commander:
     def wait_heartbeat(self, log=True):
         heartbeat = self.connection.wait_heartbeat()
         if log:
-            print(heartbeat)
+            logger.info(heartbeat)
         return heartbeat
 
     def send_heartbeat(self):
@@ -56,7 +59,7 @@ class Commander:
             )
 
     def set_message_interval(self, message: int, interval_us: int):
-        print("<MESSAGE INTERVAL>")
+        logger.debug("<MESSAGE INTERVAL>")
         interval_message = self.connection.mav.command_long_encode(
             self.connection.target_system,
             self.connection.target_component,
@@ -77,12 +80,11 @@ class Commander:
             if response is not None:
                 break
 
-        print(response)
-        print("</MESSAGE INTERVAL>")
+        logger.debug(response)
+        logger.debug("</MESSAGE INTERVAL>")
         return response.result  # type: ignore
 
     def odometry(self, x, y, z, qw, qx, qy, qz, timestamp, quality=100, reset_counter=0):
-        #print("<ODOMETRY>")
         self.connection.mav.odometry_send(
             timestamp,
             mavutil.mavlink.MAV_FRAME_LOCAL_NED,
@@ -97,7 +99,6 @@ class Commander:
             mavutil.mavlink.MAV_ESTIMATOR_TYPE_VIO,
             quality
         )
-        #print("</ODOMETRY>")
 
 
 class StateMonitor:
@@ -256,14 +257,16 @@ if __name__ == "__main__":
             state.update_state()
 
             if i % 100 == 0:
-                print(f"FPS: {1 / (time.monotonic() - _time) * 100:.0f}")
+                logger.info(f"FPS: {1 / (time.monotonic() - _time) * 100:.0f}")
                 _time = time.monotonic()
-                print(f"Voltage: {state.voltage / 1000 / 4}")
-                print(
+                logger.info(f"Voltage: {state.voltage / 1000 / 4}")
+                logger.info(
                     f"Attitude quat: q1:{state.attitude_quaternion.q1} q2:{state.attitude_quaternion.q1} q3: {state.attitude_quaternion.q3} q4: {state.attitude_quaternion.q4}"
                 )
     except ConnectionError:
-        print("Connection lost.")
+        logger.error("Connection lost.")
+    except Exception as e:
+        logger.exception("Main mavlink script terminated due to an unhandled exception.")
     finally:
         try:
             connection.close()

@@ -11,12 +11,13 @@ from src import conf, mav
 from src.calc import interpolate
 from src.icpo import IcpOdometry
 from src.tof_camera import TofCamera
+from src.log import get_logger
 
 
 class PipelineThread(Thread):
     def __init__(self):
         super().__init__()
-
+        self.logger = get_logger(self.__class__.__name__)
         self.running = False
         self.condition = Condition()
         self.frame = None
@@ -84,7 +85,7 @@ class CameraThread(PipelineThread):
                 with self.condition:
                     if self.pipeline_active:
                         if self.frame is not None:
-                            print(
+                            self.logger.warning(
                                 "Camera: Next frame ready, while previous was not acquired!"
                             )
                             self.running = False
@@ -93,6 +94,8 @@ class CameraThread(PipelineThread):
                     self.condition.notify()
                 if self.mav_state is not None:
                     self.mav_state.timesync()
+        except Exception as e:
+            self.logger.exception("CameraThread terminated due to an unhandled exception.")
         finally:
             with self.condition:
                 self.running = False
@@ -122,17 +125,18 @@ class PreprocessFrameThread(PipelineThread):
                 extra_data["preprocess_time"] = _time
                 frame = (amplitude, depth, mask, extra_data)
 
-                # We should process this frame
                 with self.condition:
                     if self.pipeline_active:
                         if self.frame is not None:
-                            print(
+                            self.logger.warning(
                                 "Preprocessor: Next frame ready, while previous was not acquired!"
                             )
                             self.running = False
                             break
                     self.frame = frame
                     self.condition.notify()
+        except Exception as e:
+            self.logger.exception("PreprocessFrameThread terminated due to an unhandled exception.")
         finally:
             with self.condition:
                 self.running = False
@@ -169,7 +173,7 @@ class PrepareCacheThread(PipelineThread):
 
                     with self.condition:
                         if self.frame is not None:
-                            print(
+                            self.logger.warning(
                                 "Prepare: Next frame ready, while previous was not acquired!"
                             )
                             self.running = False
@@ -181,6 +185,8 @@ class PrepareCacheThread(PipelineThread):
                     amplitude, depth, mask, self.frame_counter
                 )
                 self.frame_counter += 1
+        except Exception as e:
+            self.logger.exception("PrepareCacheThread terminated due to an unhandled exception.")
         finally:
             with self.condition:
                 self.running = False
@@ -216,17 +222,19 @@ class ComputeThread(PipelineThread):
                 if os.path.isfile("/tmp/reset"):
                     os.remove("/tmp/reset")
                     self.odometry.reset_position()
-                    print("Position reset by user.")
+                    self.logger.info("Position reset by user.")
 
                 with self.condition:
                     if self.frame is not None:
-                        print(
+                        self.logger.warning(
                             "Compute: Next frame ready, while previous was not acquired!"
                         )
                         self.running = False
                         break
                     self.frame = frame
                     self.condition.notify()
+        except Exception as e:
+            self.logger.exception("ComputeThread terminated due to an unhandled exception.")
         finally:
             with self.condition:
                 self.running = False
@@ -260,6 +268,8 @@ class OutputMavlinkThread(PipelineThread):
                 if extra_data["ID"] % conf.FPS == 0:
                     self.commander.send_heartbeat()
                 self.commander.odometry(x, y, z, qw, qx, qy, qz, extra_data["frame_timestamp"] // 1000)
+        except Exception as e:
+            self.logger.exception("OutputMavlinkThread terminated due to an unhandled exception.")
         finally:
             with self.condition:
                 self.running = False

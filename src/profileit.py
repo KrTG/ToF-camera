@@ -1,6 +1,9 @@
 import cProfile
 import time
 
+from src.log import get_logger
+
+logger = get_logger(__name__)
 
 def profileit(output_file=None):
     def decorator(func):
@@ -13,7 +16,7 @@ def profileit(output_file=None):
             if output_file:
                 pr.dump_stats(output_file + "." + str(time.time_ns()))
             else:
-                print("No output file specified. Profiling data not saved.")
+                logger.warning("No output file specified. Profiling data not saved.")
 
             return result
 

@@ -5,6 +5,9 @@ import numpy as np
 import ArducamDepthCamera as ac
 
 from src import conf
+from src.log import get_logger
+
+logger = get_logger(__name__)
 
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
@@ -21,19 +24,19 @@ class TofCamera:
         self.clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
 
     def start(self):
-        print("Arducam Depth Camera Streaming.")
-        print("  SDK version:", ac.__version__)
+        logger.info("Arducam Depth Camera Streaming.")
+        logger.info(f"  SDK version: {ac.__version__}")
 
         self.cam = ac.ArducamCamera()
 
         ret = self.cam.open(ac.Connection.CSI, 0)
         if ret != 0:
-            print("Failed to open camera. Error code:", ret)
+            logger.error(f"Failed to open camera. Error code: {ret}")
             return
 
         ret = self.cam.start(ac.FrameType.DEPTH)
         if ret != 0:
-            print("Failed to start camera. Error code:", ret)
+            logger.error(f"Failed to start camera. Error code: {ret}")
             self.cam.close()
             return
 
@@ -41,9 +44,9 @@ class TofCamera:
         self.cam.setControl(ac.Control.AUTO_FRAME_RATE, 0)
 
         info = self.cam.getCameraInfo()
-        print("----CAMERA SETTINGS----")
-        print(f"Camera resolution: {info.width}x{info.height}")
-        print(f"Device type: {info.device_type}")
+        logger.info("----CAMERA SETTINGS----")
+        logger.info(f"Camera resolution: {info.width}x{info.height}")
+        logger.info(f"Device type: {info.device_type}")
 
         self.range = self.cam.getControl(ac.Control.RANGE)
         self.fmt_height = self.cam.getControl(ac.Control.FMT_HEIGHT)
@@ -61,35 +64,35 @@ class TofCamera:
         self.cy = self.cam.getControl(ac.Control.INTRINSIC_CY)
         self.denoise = self.cam.getControl(ac.Control.DENOISE)
 
-        print(f"Range: {self.range}")
-        print(f"Fmt width: {self.fmt_width}")
-        print(f"Fmt height: {self.fmt_height}")
-        print(f"Mode: {self.mode}")
-        print(f"Frame mode: {self.frame_mode}")
-        print(f"Exposure: {self.exposure}")
-        print(f"Frame rate: {self.frame_rate}")
-        print(f"Skip frame: {self.skip_frame}")
-        print(f"Skip frame loop: {self.skip_frame_loop}")
-        print(f"Auto frame rate: {self.auto_frame_rate}")
-        print(f"Intrinsic FX: {self.fx}")
-        print(f"Intrinsic FY: {self.fy}")
-        print(f"Intrinsic CX: {self.cx}")
-        print(f"Intrinsic CY: {self.cy}")
-        print(f"Denoise: {self.denoise}")
-        print("--------")
+        logger.info(f"Range: {self.range}")
+        logger.info(f"Fmt width: {self.fmt_width}")
+        logger.info(f"Fmt height: {self.fmt_height}")
+        logger.info(f"Mode: {self.mode}")
+        logger.info(f"Frame mode: {self.frame_mode}")
+        logger.info(f"Exposure: {self.exposure}")
+        logger.info(f"Frame rate: {self.frame_rate}")
+        logger.info(f"Skip frame: {self.skip_frame}")
+        logger.info(f"Skip frame loop: {self.skip_frame_loop}")
+        logger.info(f"Auto frame rate: {self.auto_frame_rate}")
+        logger.info(f"Intrinsic FX: {self.fx}")
+        logger.info(f"Intrinsic FY: {self.fy}")
+        logger.info(f"Intrinsic CX: {self.cx}")
+        logger.info(f"Intrinsic CY: {self.cy}")
+        logger.info(f"Denoise: {self.denoise}")
+        logger.info("--------")
 
         self.started = True
 
     def stop(self):
         if not self.started or not self.cam:
-            print("Camera not initalized.")
+            logger.warning("Camera not initalized.")
             return
         self.cam.stop()
         self.cam.close()
 
     def get_intrinsic_matrix(self):
         if not self.started or not self.fx or not self.fy or not self.cx or not self.cy:
-            print("Camera not initalized.")
+            logger.warning("Camera not initalized.")
             return
 
         s = self.scale
@@ -107,7 +110,7 @@ class TofCamera:
 
     def get_frame_raw(self):
         if not self.started or not self.cam or not self.range:
-            print("Camera not initalized.")
+            logger.warning("Camera not initalized.")
             return
 
         frame = self.cam.requestFrame(self.frame_timeout)
@@ -118,7 +121,7 @@ class TofCamera:
         if hasattr(frame, '__mock__'):
             return
         if not self.started or not self.cam or not self.range:
-            print("Camera not initalized.")
+            logger.warning("Camera not initalized.")
             return
         self.cam.releaseFrame(frame)
 

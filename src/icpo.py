@@ -8,7 +8,9 @@ from scipy.linalg import expm, logm
 from scipy.spatial.transform import Rotation
 
 from src import conf
+from src.log import get_logger
 
+logger = get_logger(__name__)
 
 def fast_inversion(transform):
     R_inv = transform[:3, :3].T
@@ -54,16 +56,16 @@ class IcpOdometry:
         )
 
         if conf.DEBUG:
-            print("----ICPO SETTINGS----")
-            print(f"Camera matrix: {self.icpo.getCameraMatrix()}")
-            print(f"Min depth: {self.icpo.getMinDepth()}")
-            print(f"Max depth: {self.icpo.getMaxDepth()}")
-            print(f"Max depth diff: {self.icpo.getMaxDepthDiff()}")
-            print(f"Max points part: {self.icpo.getMaxPointsPart()}")
-            print(f"Iter counts: {self.icpo.getIterationCounts()}")
-            print(f"Min gradient magnitudes: {self.icpo.getMinGradientMagnitudes()}")
-            print(f"Transform type: {self.icpo.getTransformType()}")
-            print("--------")
+            logger.debug("----ICPO SETTINGS----")
+            logger.debug(f"Camera matrix: {self.icpo.getCameraMatrix()}")
+            logger.debug(f"Min depth: {self.icpo.getMinDepth()}")
+            logger.debug(f"Max depth: {self.icpo.getMaxDepth()}")
+            logger.debug(f"Max depth diff: {self.icpo.getMaxDepthDiff()}")
+            logger.debug(f"Max points part: {self.icpo.getMaxPointsPart()}")
+            logger.debug(f"Iter counts: {self.icpo.getIterationCounts()}")
+            logger.debug(f"Min gradient magnitudes: {self.icpo.getMinGradientMagnitudes()}")
+            logger.debug(f"Transform type: {self.icpo.getTransformType()}")
+            logger.debug("--------")
 
         self.anchor_attitude: Rotation | None = None
         self.previous_transform: np.ndarray = np.eye(4, dtype=np.float64)
@@ -167,9 +169,9 @@ class IcpOdometry:
             self.previous_transform = transform
         else:
             if conf.DEBUG:
-                print("Lost tracking. Re-set using linear prediction.")
-            # Apply the 'guess' as the real prediction since we lost tracking
-            # and it's the best compromise
+                logger.debug("Lost tracking. Re-set using linear prediction.")
+            # Apply the \'guess\' as the real prediction since we lost tracking
+            # and it\'s the best compromise
             self.global_pose @= fast_inversion(init_rt)
 
             # Either reset or set to init_rt - we choose to reset

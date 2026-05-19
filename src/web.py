@@ -19,6 +19,9 @@ from src.estimator import (CameraThread, ComputeThread, PipelineThread,
 from src import conf
 from src.icpo import IcpOdometry
 from src.tof_camera import TofCamera
+from src.log import get_logger
+
+logger = get_logger(__name__)
 
 
 class Algorithm(enum.Enum):
@@ -50,6 +53,8 @@ class FrameSaverThread(PipelineThread):
 
                 with self.condition:
                     self.cached_frame = amplitude, depth
+        except Exception as e:
+            self.logger.exception("FrameSaverThread terminated due to an unhandled exception.")
         finally:
             pass
 
@@ -139,6 +144,8 @@ class RecorderThread(PipelineThread):
                 with self.condition:
                     self.frame = frame
                     self.condition.notify()
+        except Exception as e:
+            self.logger.exception("RecorderThread terminated due to an unhandled exception.")
         finally:
             self.stop_recording()
             with self.condition:
@@ -167,16 +174,18 @@ class PlayerThread(PipelineThread):
                         if self.delay > 0:
                             time.sleep(self.delay)
                     except EOFError:
-                        print("Player: Reached end of recording")
+                        self.logger.info("Player: Reached end of recording")
                         self.running = False
                         break
                     except Exception as e:
-                        print(f"Player error: {e}")
+                        self.logger.exception(f"Player error: {e}")
                         self.running = False
                         break
         except FileNotFoundError:
-            print(f"Player: Recording file {self.filename} not found.")
+            self.logger.error(f"Player: Recording file {self.filename} not found.")
             self.running = False
+        except Exception as e:
+            self.logger.exception("PlayerThread terminated due to an unhandled exception.")
         finally:
             with self.condition:
                 self.running = False
@@ -237,6 +246,8 @@ class OdometrySaverThread(PipelineThread):
                 with self.condition:
                     self.cached_frame = frame
 
+        except Exception as e:
+            self.logger.exception("OdometrySaverThread terminated due to an unhandled exception.")
         finally:
             pass
 
@@ -250,6 +261,7 @@ class WatchdogThread(threading.Thread):
         super().__init__()
         self.streamer = streamer
         self.timeout = timeout
+        self.logger = get_logger(self.__class__.__name__)
 
         self.running = True
         self.lock = threading.Lock()
@@ -262,7 +274,7 @@ class WatchdogThread(threading.Thread):
                 if not self.running:
                     return
                 if (time.monotonic() - self.watchdog_timer) > self.timeout:
-                    print(f"No ping for {self.timeout} seconds. Shutting down the threads.")
+                    self.logger.warning(f"No ping for {self.timeout} seconds. Shutting down the threads.")
                     with self.streamer.camera_lock:
                         if self.streamer.watchdog_thread == self:
                             self.streamer.cleanup()
@@ -455,7 +467,7 @@ class Streamer:
                 self.start_video()
                 self.algorithm = Algorithm.VIDEO
 
-            print(f"Streaming video")
+            logger.info(f"Streaming video")
 
         frame_saver_thread = self.frame_saver_thread
         while True:
@@ -487,7 +499,7 @@ class Streamer:
                 self.cleanup()
                 self.start_odometry()
                 self.algorithm = Algorithm.ODOMETRY
-            print("Streaming odometry")
+            logger.info("Streaming odometry")
 
         odometry_saver_thread = self.odometry_saver_thread
         while True:
@@ -507,7 +519,7 @@ class Streamer:
                 self.cleanup()
                 self.start_recording()
                 self.algorithm = Algorithm.RECORDING
-            print("Streaming recording events")
+            logger.info("Streaming recording events")
 
         recorder_thread = self.recorder_thread
         while True:
@@ -533,7 +545,7 @@ class Streamer:
                 self.start_playback(filename, delay=0.1)
                 self.algorithm = Algorithm.PLAYBACK
 
-            print(f"Streaming playback: {filename}")
+            logger.info(f"Streaming playback: {filename}")
 
         while True:
             if self.player_thread is None or not self.player_thread.running or self.camera is None:
