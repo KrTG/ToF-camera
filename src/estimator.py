@@ -237,7 +237,7 @@ class OutputMavlinkThread(PipelineThread):
         self.commander = mav.Commander(mav_connection)
 
         self.is_sending = False
-        self.quality_range = (0.25, 0.5)
+        self.quality_range = (0.25, 0.35)
         self.reset_counter = 0
 
     def run(self):
