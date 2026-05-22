@@ -264,9 +264,11 @@ class OutputMavlinkThread(PipelineThread):
                 # Re-start sending when quality gets average
                 if self.is_sending:
                     if extra_data["quality"] < self.quality_range[0]:
+                        self.logger.warning("Output: Stopping sending odometry. Quality too low!")
                         self.is_sending = False
                 else:
                     if extra_data["quality"] > self.quality_range[1]:
+                        self.logger.info("Output: Starting sending odometry. Quality regained.")
                         self.reset_counter += 1
                         self.is_sending = True
 
