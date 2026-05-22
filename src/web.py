@@ -233,6 +233,7 @@ class OdometrySaverThread(PipelineThread):
                     "compute_time_min": min(self.compute_times) / 1000000,
                     "compute_time_max": max(self.compute_times) / 1000000,
                     "compute_time_avg": mean(self.compute_times) / 1000000,
+                    "quality": extra_data["quality"],
                     "missed_frames": self.missed_frames,
                     "x": x,
                     "y": y,

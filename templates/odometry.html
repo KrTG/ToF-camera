@@ -46,6 +46,7 @@
 <h3>Error</h3>
 <div class="dashboard-container">
     <table class="data-table">
+        <tr><td>Quality:</td><td><span id="val-quality">0</span></td></tr>
         <tr><td>Missed frames:</td><td><span id="val-missed-frames">0</span></td></tr>
     </table>
 </div>
@@ -84,7 +85,7 @@
         document.getElementById("val-compute-time-avg").innerText = data.compute_time_avg.toFixed(0);
 
         document.getElementById("val-missed-frames").innerText = data.missed_frames.toFixed(0);
-
+        document.getElementById("val-quality").innerText = data.quality.toFixed(0);
         // Translation
         document.getElementById("val-x").innerText = data.x.toFixed(2);
         document.getElementById("val-y").innerText = data.y.toFixed(2);

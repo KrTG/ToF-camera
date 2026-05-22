@@ -10,6 +10,10 @@ from scipy.spatial.transform import Rotation
 from src import conf
 from src.log import get_logger
 
+
+QUALITY_SMOOTHING_ALPHA = 0.06
+
+
 logger = get_logger(__name__)
 
 def fast_inversion(transform):
@@ -97,6 +101,8 @@ class IcpOdometry:
         self.frd_to_rdf_rotation_inv = self.rdf_to_frd_rotation
         self.final_transform = self.rdf_to_frd_transform.T @ self.camera_mount_transform.T
 
+        self.quality = 0.0
+
         self.reset_position()
 
     def prepare_warped_frame(
@@ -131,6 +137,28 @@ class IcpOdometry:
             self.icpo.prepareFrameCache(warped_frame, cv2.rgbd.ODOMETRY_FRAME_CACHE_DST)
         self.anchor_attitude = attitude
         return warped_frame, time.monotonic_ns() - _start_time
+
+    def integrate_quality_mask(self, mask: np.ndarray):
+        """
+        Calculate the quality per frame and integrate it into the 
+        exponential moving average.
+        """
+        ratio_unmasked = np.count_nonzero(mask) / mask.size
+        
+        a = QUALITY_SMOOTHING_ALPHA
+        self.quality = (a * ratio_unmasked) + ((1 - a) * self.quality)
+
+        return self.quality
+    
+    def integrate_quality_success(self, success: bool):
+        """
+        If not successful assume 0 quality as a second measure.
+        """
+        if not success:
+            a = QUALITY_SMOOTHING_ALPHA
+            self.quality = (1 - a) * self.quality
+
+        return self.quality
 
     def prepare_regular_frame(
         self, amplitude: MatLike, depth: MatLike, mask: MatLike, frame_id: int

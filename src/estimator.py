@@ -166,8 +166,10 @@ class PrepareCacheThread(PipelineThread):
                 warped_frame, _time = self.odometry.prepare_warped_frame(
                     amplitude, depth, mask, self.frame_counter, extra_data["rotation"]
                 )
+                quality = self.odometry.integrate_quality_mask(mask)
                 extra_data["cache_time"] = self.anchor_calculation_time + _time
                 extra_data["ID"] = self.frame_counter
+                extra_data["quality"] = quality
                 if self.anchor_frame is not None:
                     frame = (self.anchor_frame, warped_frame, extra_data)
 
@@ -214,9 +216,11 @@ class ComputeThread(PipelineThread):
                 pose, success, _time = self.odometry.compute_frame(
                     anchor_frame, warped_frame, extra_data["rotation"]
                 )
+                quality = self.odometry.integrate_quality_success(success)
                 extra_data["compute_time"] = _time
                 extra_data["compute_success"] = success
                 extra_data["id"] = warped_frame.ID
+                extra_data["quality"] = quality
                 frame = (pose, extra_data)
 
                 if os.path.isfile("/tmp/reset"):
@@ -248,6 +252,10 @@ class OutputMavlinkThread(PipelineThread):
         self.compute_thread = compute_thread
         self.commander = mav.Commander(mav_connection)
 
+        self.is_sending = False
+        self.quality_range = (0.25, 0.5)
+        self.reset_counter = 0
+
     def run(self):
         self.running = True
         try:
@@ -267,7 +275,26 @@ class OutputMavlinkThread(PipelineThread):
 
                 if extra_data["ID"] % conf.FPS == 0:
                     self.commander.send_heartbeat()
-                self.commander.odometry(x, y, z, qw, qx, qy, qz, extra_data["frame_timestamp"] // 1000)
+
+                # Stop sending when quality is very low
+                # Re-start sending when quality gets average
+                if self.is_sending:
+                    if extra_data["quality"] < self.quality_range[0]:
+                        self.is_sending = False
+                else:
+                    if extra_data["quality"] > self.quality_range[1]:
+                        self.reset_counter += 1
+                        self.is_sending = True
+
+                # For now we do not use the quality field and control
+                # sending ourselves as I don't know what does this
+                # affect and how it works on the drone side.
+                if self.is_sending:
+                    self.commander.odometry(
+                        x, y, z, qw, qx, qy, qz,
+                        timestamp=extra_data["frame_timestamp"] // 1000,
+                        reset_counter=self.reset_counter
+                    )
         except Exception as e:
             self.logger.exception("OutputMavlinkThread terminated due to an unhandled exception.")
         finally:
