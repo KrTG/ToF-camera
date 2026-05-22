@@ -160,7 +160,6 @@ class PrepareCacheThread(PipelineThread):
                 )
                 quality = self.odometry.integrate_quality_mask(mask)
                 extra_data["cache_time"] = self.anchor_calculation_time + _time
-                extra_data["ID"] = self.frame_counter
                 extra_data["quality"] = quality
                 if self.anchor_frame is not None:
                     frame = (self.anchor_frame, warped_frame, extra_data)
