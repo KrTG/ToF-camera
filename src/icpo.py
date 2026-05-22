@@ -177,11 +177,15 @@ class IcpOdometry:
         @param anchor_frame: Unwarped previous frame (anchor)
         @param warped_frame: Current warped frame
         """
-        assert (warped_frame.ID - anchor_frame.ID) == 1
+        skip = warped_frame.ID - anchor_frame.ID
+        if skip != 1:
+            logger.warning("Computing with skipped frames!")
 
         _start_time = time.monotonic_ns()
 
         init_rt = self.previous_transform.copy()
+        if skip != 1:
+            init_rt = np.linalg.matrix_power(init_rt, skip)
 
         # ICP is now translation-only (transformType=2)
         # Both frames are now aligned to the anchor's orientation
@@ -194,12 +198,15 @@ class IcpOdometry:
             attitude = self.frd_to_rdf_rotation * attitude * self.frd_to_rdf_rotation_inv
             self.global_pose[:3, :3] = attitude.as_matrix()
 
-            self.previous_transform = transform
+            if skip != 1:
+                self.previous_transform = fractional_se3_power(transform, 1.0 / skip)
+            else:
+                self.previous_transform = transform
         else:
             if conf.DEBUG:
                 logger.debug("Lost tracking. Re-set using linear prediction.")
-            # Apply the \'guess\' as the real prediction since we lost tracking
-            # and it\'s the best compromise
+            # Apply the 'guess' as the real prediction since we lost tracking
+            # and it's the best compromise
             self.global_pose @= fast_inversion(init_rt)
 
             # Either reset or set to init_rt - we choose to reset

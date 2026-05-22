@@ -21,7 +21,6 @@ class PipelineThread(Thread):
         self.running = False
         self.condition = Condition()
         self.frame = None
-        self.pipeline_active = False
 
     def wait_frame(self) -> Optional[Tuple]:
         with self.condition:
@@ -29,7 +28,6 @@ class PipelineThread(Thread):
                 self.condition.wait()
             acquired_frame = self.frame
             self.frame = None
-            self.pipeline_active = True
             return acquired_frame
 
     def stop(self):
@@ -79,17 +77,15 @@ class CameraThread(PipelineThread):
                     extra_data["SYS_STATUS"] = self.mav_state.sys_status
                     extra_data["rotation"] = interpolate(att_pre, att_post, time_ns / 1_000_000)
                 extra_data["frame_timestamp"] = time_ns
+                extra_data["ID"] = self.frame_counter // self.divisor
                 frame = (frame, extra_data)
 
                 # We should process this frame
                 with self.condition:
-                    if self.pipeline_active:
-                        if self.frame is not None:
-                            self.logger.warning(
-                                "Camera: Next frame ready, while previous was not acquired!"
-                            )
-                            self.running = False
-                            break
+                    if self.frame is not None:
+                        self.logger.warning(
+                            "Camera: Next frame ready, while previous was not acquired!"
+                        )
                     self.frame = frame
                     self.condition.notify()
                 if self.mav_state is not None:
@@ -126,13 +122,10 @@ class PreprocessFrameThread(PipelineThread):
                 frame = (amplitude, depth, mask, extra_data)
 
                 with self.condition:
-                    if self.pipeline_active:
-                        if self.frame is not None:
-                            self.logger.warning(
-                                "Preprocessor: Next frame ready, while previous was not acquired!"
-                            )
-                            self.running = False
-                            break
+                    if self.frame is not None:
+                        self.logger.warning(
+                            "Preprocessor: Next frame ready, while previous was not acquired!"
+                        )
                     self.frame = frame
                     self.condition.notify()
         except Exception as e:
@@ -149,7 +142,6 @@ class PrepareCacheThread(PipelineThread):
         self.camera_thread = camera_thread
         self.odometry = odometry
 
-        self.frame_counter = 0
         self.anchor_frame = None
         self.anchor_calculation_time = 0
 
@@ -164,7 +156,7 @@ class PrepareCacheThread(PipelineThread):
 
                 amplitude, depth, mask, extra_data = frame
                 warped_frame, _time = self.odometry.prepare_warped_frame(
-                    amplitude, depth, mask, self.frame_counter, extra_data["rotation"]
+                    amplitude, depth, mask, extra_data["ID"], extra_data["rotation"]
                 )
                 quality = self.odometry.integrate_quality_mask(mask)
                 extra_data["cache_time"] = self.anchor_calculation_time + _time
@@ -178,15 +170,11 @@ class PrepareCacheThread(PipelineThread):
                             self.logger.warning(
                                 "Prepare: Next frame ready, while previous was not acquired!"
                             )
-                            self.running = False
-                            break
-
                         self.frame = frame
                         self.condition.notify()
                 self.anchor_frame, self.anchor_calculation_time = self.odometry.prepare_regular_frame(
-                    amplitude, depth, mask, self.frame_counter
+                    amplitude, depth, mask, extra_data["ID"]
                 )
-                self.frame_counter += 1
         except Exception as e:
             self.logger.exception("PrepareCacheThread terminated due to an unhandled exception.")
         finally:
@@ -233,8 +221,6 @@ class ComputeThread(PipelineThread):
                         self.logger.warning(
                             "Compute: Next frame ready, while previous was not acquired!"
                         )
-                        self.running = False
-                        break
                     self.frame = frame
                     self.condition.notify()
         except Exception as e:
@@ -243,7 +229,6 @@ class ComputeThread(PipelineThread):
             with self.condition:
                 self.running = False
                 self.condition.notify_all()
-
 
 
 class OutputMavlinkThread(PipelineThread):
