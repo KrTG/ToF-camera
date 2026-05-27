@@ -242,8 +242,10 @@ class OutputMavlinkThread(PipelineThread):
 
     def run(self):
         self.running = True
-        led.BLUE_LED.on()
         try:
+            blue_led = led.get_blue()
+            green_led = led.get_green()
+            blue_led.on()
             while self.running:
                 # Wait for a new frame from the compute thread
                 frame_data = self.compute_thread.wait_frame()
@@ -267,15 +269,15 @@ class OutputMavlinkThread(PipelineThread):
                     if extra_data["quality"] < self.quality_range[0]:
                         self.logger.warning("Output: Stopping sending odometry. Quality too low!")
                         self.is_sending = False
-                        led.BLUE_LED.on()
-                        led.GREEN_LED.off()
+                        blue_led.on()
+                        green_led.off()
                 else:
                     if extra_data["quality"] > self.quality_range[1]:
                         self.logger.info("Output: Starting sending odometry. Quality regained.")
                         self.reset_counter += 1
                         self.is_sending = True
-                        led.GREEN_LED.on()
-                        led.BLUE_LED.off()
+                        green_led.on()
+                        blue_led.off()
 
                 # For now we do not use the quality field and control
                 # sending ourselves as I don't know what does this
@@ -289,7 +291,10 @@ class OutputMavlinkThread(PipelineThread):
         except Exception as e:
             self.logger.exception("OutputMavlinkThread terminated due to an unhandled exception.")
         finally:
-            led.BLUE_LED.off()
+            blue_led.off()
+            blue_led.close()
+            green_led.off()
+            green_led.close()
             with self.condition:
                 self.running = False
                 self.condition.notify_all()

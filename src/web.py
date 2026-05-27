@@ -41,8 +41,9 @@ class FrameSaverThread(PipelineThread):
 
     def run(self):
         self.running = True
-        led.BLUE_LED.on()
         try:
+            blue_led = led.get_blue()
+            blue_led.on()
             while self.running:
                 frame = self.camera_thread.wait_frame()
                 if frame is None:
@@ -58,7 +59,8 @@ class FrameSaverThread(PipelineThread):
         except Exception as e:
             self.logger.exception("FrameSaverThread terminated due to an unhandled exception.")
         finally:
-            led.BLUE_LED.off()
+            blue_led.off()
+            blue_led.close()
 
     def get_frame(self) -> Optional[Tuple]:
         with self.condition:
@@ -116,8 +118,9 @@ class RecorderThread(PipelineThread):
 
     def run(self):
         self.running = True
-        led.BLUE_LED.on()
         try:
+            blue_led = led.get_blue()
+            blue_led.on()
             while self.running:
                 frame = self.camera_thread.wait_frame()
                 if frame is None:
@@ -150,7 +153,8 @@ class RecorderThread(PipelineThread):
         except Exception as e:
             self.logger.exception("RecorderThread terminated due to an unhandled exception.")
         finally:
-            led.BLUE_LED.off()
+            blue_led.off()
+            blue_led.close()
             self.stop_recording()
             with self.condition:
                 self.running = False
@@ -165,8 +169,9 @@ class PlayerThread(PipelineThread):
 
     def run(self):
         self.running = True
-        led.BLUE_LED.on()
         try:
+            blue_led = led.get_blue()
+            blue_led.on()
             with open(self.filename, "rb") as f:
                 while self.running:
                     try:
@@ -192,7 +197,8 @@ class PlayerThread(PipelineThread):
         except Exception as e:
             self.logger.exception("PlayerThread terminated due to an unhandled exception.")
         finally:
-            led.BLUE_LED.off()
+            blue_led.off()
+            blue_led.close()
             with self.condition:
                 self.running = False
                 self.condition.notify_all()
@@ -210,8 +216,9 @@ class OdometrySaverThread(PipelineThread):
 
     def run(self):
         self.running = True
-        led.BLUE_LED.on()
         try:
+            blue_led = led.get_blue()
+            blue_led.on()
             while self.running:
                 frame = self.compute_thread.wait_frame()
                 if frame is None:
@@ -257,7 +264,8 @@ class OdometrySaverThread(PipelineThread):
         except Exception as e:
             self.logger.exception("OdometrySaverThread terminated due to an unhandled exception.")
         finally:
-            led.BLUE_LED.off()
+            blue_led.off()
+            blue_led.close()
 
     def get_frame(self) -> Optional[dict]:
         with self.condition:
@@ -284,9 +292,11 @@ class WatchdogThread(threading.Thread):
                 if (time.monotonic() - self.watchdog_timer) > self.timeout:
                     self.logger.warning(f"No ping for {self.timeout} seconds. Shutting down the threads.")
                     with self.streamer.camera_lock:
-                        if self.streamer.watchdog_thread == self:
+                        if self.streamer.algorithm != Algorithm.NONE:
                             self.streamer.cleanup()
-                        return
+                        #if self.streamer.watchdog_thread == self:
+
+                        #return
 
     def ping(self):
         with self.lock:
@@ -317,6 +327,8 @@ class Streamer:
         if self.watchdog_thread is None:
             self.watchdog_thread = WatchdogThread(self)
             self.watchdog_thread.start()
+        else:
+            self.watchdog_thread.ping()
 
         self.camera = TofCamera(frame_timeout=0)
         self.camera_thread = CameraThread(self.camera)
@@ -357,6 +369,8 @@ class Streamer:
         if self.watchdog_thread is None:
             self.watchdog_thread = WatchdogThread(self)
             self.watchdog_thread.start()
+        else:
+            self.watchdog_thread.ping()
 
         self.camera = TofCamera(frame_timeout=0)
         self.camera_thread = CameraThread(self.camera, mav_connection=self.mav_connection)
@@ -395,6 +409,8 @@ class Streamer:
         if self.watchdog_thread is None:
             self.watchdog_thread = WatchdogThread(self)
             self.watchdog_thread.start()
+        else:
+            self.watchdog_thread.ping()
 
         self.camera = TofCamera(frame_timeout=0)
         self.camera_thread = CameraThread(self.camera, mav_connection=self.mav_connection)
@@ -442,6 +458,8 @@ class Streamer:
         if self.watchdog_thread is None:
             self.watchdog_thread = WatchdogThread(self)
             self.watchdog_thread.start()
+        else:
+            self.watchdog_thread.ping()
 
         self.camera = TofCamera()
         self.camera.started = True # Enable conversion methods without HW access

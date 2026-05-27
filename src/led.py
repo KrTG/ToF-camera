@@ -1,4 +1,7 @@
 import gpiozero
 
-BLUE_LED = gpiozero.LED(23)
-GREEN_LED = gpiozero.LED(24)
+def get_blue():
+    return gpiozero.LED(23)
+
+def get_green():
+    return gpiozero.LED(24)
