@@ -20,6 +20,7 @@ from src import conf
 from src.icpo import IcpOdometry
 from src.tof_camera import TofCamera
 from src.log import get_logger
+from src import led
 
 logger = get_logger(__name__)
 
@@ -40,6 +41,7 @@ class FrameSaverThread(PipelineThread):
 
     def run(self):
         self.running = True
+        led.BLUE_LED.on()
         try:
             while self.running:
                 frame = self.camera_thread.wait_frame()
@@ -56,7 +58,7 @@ class FrameSaverThread(PipelineThread):
         except Exception as e:
             self.logger.exception("FrameSaverThread terminated due to an unhandled exception.")
         finally:
-            pass
+            led.BLUE_LED.off()
 
     def get_frame(self) -> Optional[Tuple]:
         with self.condition:
@@ -114,6 +116,7 @@ class RecorderThread(PipelineThread):
 
     def run(self):
         self.running = True
+        led.BLUE_LED.on()
         try:
             while self.running:
                 frame = self.camera_thread.wait_frame()
@@ -147,6 +150,7 @@ class RecorderThread(PipelineThread):
         except Exception as e:
             self.logger.exception("RecorderThread terminated due to an unhandled exception.")
         finally:
+            led.BLUE_LED.off()
             self.stop_recording()
             with self.condition:
                 self.running = False
@@ -161,6 +165,7 @@ class PlayerThread(PipelineThread):
 
     def run(self):
         self.running = True
+        led.BLUE_LED.on()
         try:
             with open(self.filename, "rb") as f:
                 while self.running:
@@ -187,6 +192,7 @@ class PlayerThread(PipelineThread):
         except Exception as e:
             self.logger.exception("PlayerThread terminated due to an unhandled exception.")
         finally:
+            led.BLUE_LED.off()
             with self.condition:
                 self.running = False
                 self.condition.notify_all()
@@ -204,6 +210,7 @@ class OdometrySaverThread(PipelineThread):
 
     def run(self):
         self.running = True
+        led.BLUE_LED.on()
         try:
             while self.running:
                 frame = self.compute_thread.wait_frame()
@@ -250,7 +257,7 @@ class OdometrySaverThread(PipelineThread):
         except Exception as e:
             self.logger.exception("OdometrySaverThread terminated due to an unhandled exception.")
         finally:
-            pass
+            led.BLUE_LED.off()
 
     def get_frame(self) -> Optional[dict]:
         with self.condition:

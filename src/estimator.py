@@ -1,4 +1,3 @@
-import math
 import os
 import time
 from threading import Condition, Thread
@@ -12,6 +11,7 @@ from src.calc import interpolate
 from src.icpo import IcpOdometry
 from src.tof_camera import TofCamera
 from src.log import get_logger
+from src import led
 
 
 class PipelineThread(Thread):
@@ -242,6 +242,7 @@ class OutputMavlinkThread(PipelineThread):
 
     def run(self):
         self.running = True
+        led.BLUE_LED.on()
         try:
             while self.running:
                 # Wait for a new frame from the compute thread
@@ -266,11 +267,15 @@ class OutputMavlinkThread(PipelineThread):
                     if extra_data["quality"] < self.quality_range[0]:
                         self.logger.warning("Output: Stopping sending odometry. Quality too low!")
                         self.is_sending = False
+                        led.BLUE_LED.on()
+                        led.GREEN_LED.off()
                 else:
                     if extra_data["quality"] > self.quality_range[1]:
                         self.logger.info("Output: Starting sending odometry. Quality regained.")
                         self.reset_counter += 1
                         self.is_sending = True
+                        led.GREEN_LED.on()
+                        led.BLUE_LED.off()
 
                 # For now we do not use the quality field and control
                 # sending ourselves as I don't know what does this
@@ -284,6 +289,7 @@ class OutputMavlinkThread(PipelineThread):
         except Exception as e:
             self.logger.exception("OutputMavlinkThread terminated due to an unhandled exception.")
         finally:
+            led.BLUE_LED.off()
             with self.condition:
                 self.running = False
                 self.condition.notify_all()
