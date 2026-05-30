@@ -1,10 +1,15 @@
 import os
 from pathlib import Path
 import pickle
+import sys
 import numpy as np
 from src import conf
 from src.icpo import IcpOdometry
 from src.tof_camera import TofCamera
+import matplotlib
+import matplotlib.pyplot as plt
+
+matplotlib.use("WebAgg")
 
 def get_test_info(readme_path):
     with open(readme_path, "r") as f:
@@ -123,12 +128,51 @@ def test_rotation(filename):
     print(f"\tloop_distance_Z:\t\t{np.linalg.norm(translations[-1][2] - translations[0][2]):.3f}")
 
 
+def plot(filename):
+    poses, success = get_poses(filename)
+
+    translations = np.array([pose[:3, 3] for pose in poses])
+    xs = translations[:, 0]
+    ys = translations[:, 1]
+    zs = translations[:, 2]
+
+    # Create a time array for coloring and sizing
+    time_values = np.arange(len(poses))
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Color points based on time
+    colors = matplotlib.colormaps.get_cmap('viridis')(time_values / float(len(poses)))
+
+    # Size points based on time (e.g., from 20 to 200)
+    s_values = np.linspace(10, 16, len(poses))
+
+    ax.scatter(xs, ys, zs, c=colors, s=s_values, marker='o') # type: ignore
+
+    # Calculate ranges for consistent scaling
+    max_range = np.array([xs.max() - xs.min(), ys.max() - ys.min(), zs.max() - zs.min()]).max() / 2.0
+
+    mid_x = (xs.max() + xs.min()) * 0.5
+    mid_y = (ys.max() + ys.min()) * 0.5
+    mid_z = (zs.max() + zs.min()) * 0.5
+
+    ax.set_xlim(mid_x - max_range, mid_x + max_range)
+    ax.set_ylim(mid_y - max_range, mid_y + max_range)
+    ax.set_zlim(mid_z - max_range, mid_z + max_range)
+
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_title(f'3D Pose Plot for {filename}')
+    plt.show()
 
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-f", "--filename")
+    parser.add_argument("-p", "--plot", action="store_true")
 
     args = parser.parse_args()
 
@@ -136,8 +180,14 @@ if __name__ == "__main__":
     if args.filename:
         filename = args.filename
 
+    if args.plot and not args.filename:
+        print("Can only plot one file at a time.")
+        sys.exit(1)
+
     for suite in Path("test").iterdir():
-        if suite.name == "hover":
+        if args.plot:
+            f = plot
+        elif suite.name == "hover":
             f = test_hover
         elif suite.name == "translation_z":
             f = test_translation_z
