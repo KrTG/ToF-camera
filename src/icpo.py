@@ -149,7 +149,7 @@ class IcpOdometry:
                 # Warped frame
                 cv2.imwrite(f"{self.debug_frames_path}/warped_amplitude_{frame_id:05d}.png", warped_amplitude)
                 cv2.imwrite(f"{self.debug_frames_path}/warped_depth_{frame_id:05d}.png", cv2.convertScaleAbs(warped_depth, alpha=255.0/warped_depth.max()))
-                cv2.imwrite(f"{self.debug_frames_path}/warped_mask_{frame_id:05d}.png", warped_mask * 255)
+                cv2.imwrite(f"{self.debug_frames_path}/warped_mask_{frame_id:05d}.png", warped_mask)
 
             warped_frame = cv2.rgbd.OdometryFrame.create(
                 warped_amplitude, warped_depth, warped_mask, None, frame_id
