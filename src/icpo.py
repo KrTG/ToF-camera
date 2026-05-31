@@ -1,3 +1,4 @@
+import os
 import time
 
 import cv2
@@ -46,7 +47,12 @@ class IcpOdometry:
         max_points_part=conf.ICPO_MAX_POINTS_PART,
         iter_counts=conf.ICPO_ITER_COUNTS,
         gradient_magnitudes=conf.ICPO_GRADIENT_MAGNITUDES,
+        debug_frames_path: str | None = None,
     ):
+        self.debug_frames_path = debug_frames_path
+        if self.debug_frames_path:
+            os.makedirs(self.debug_frames_path, exist_ok=True)
+
         self.cam_matrix = cam_matrix.astype(np.float32)
         self.icpo = cv2.rgbd.RgbdICPOdometry.create(
             cameraMatrix=cam_matrix,
@@ -56,8 +62,8 @@ class IcpOdometry:
             maxPointsPart=max_points_part,
             iterCounts=iter_counts,
             minGradientMagnitudes=gradient_magnitudes,
-            #transformType=cv2.rgbd.ODOMETRY_TRANSLATION,
-            transformType=cv2.rgbd.ODOMETRY_RIGID_BODY_MOTION
+            transformType=cv2.rgbd.ODOMETRY_TRANSLATION,
+            #transformType=cv2.rgbd.ODOMETRY_RIGID_BODY_MOTION
         )
 
         if conf.DEBUG:
@@ -127,11 +133,24 @@ class IcpOdometry:
             warped_depth = np.zeros_like(depth)
             warped_mask = np.zeros_like(mask)
 
-            cv2.rgbd.warpFrame(
-                amplitude, depth, mask,
-                T_warp, K, distCoeff,
-                warped_amplitude, warped_depth, warped_mask
-            )
+            R = T_warp[:3, :3]
+            H = K @ R @ np.linalg.inv(K)
+
+            warped_amplitude = cv2.warpPerspective(amplitude, H, (amplitude.shape[1], amplitude.shape[0]), flags=cv2.INTER_LINEAR)
+            warped_depth = cv2.warpPerspective(depth, H, (depth.shape[1], depth.shape[0]), flags=cv2.INTER_NEAREST)
+            warped_mask = cv2.warpPerspective(mask, H, (mask.shape[1], mask.shape[0]), flags=cv2.INTER_NEAREST)
+
+            # DEBUG: Save frames for comparison
+            if self.debug_frames_path:
+                # Original frame
+                cv2.imwrite(f"{self.debug_frames_path}/unwarped_amplitude_{frame_id:05d}.png", amplitude)
+                cv2.imwrite(f"{self.debug_frames_path}/unwarped_depth_{frame_id:05d}.png", cv2.convertScaleAbs(depth, alpha=255.0/depth.max()))
+                cv2.imwrite(f"{self.debug_frames_path}/unwarped_mask_{frame_id:05d}.png", mask * 255)
+                # Warped frame
+                cv2.imwrite(f"{self.debug_frames_path}/warped_amplitude_{frame_id:05d}.png", warped_amplitude)
+                cv2.imwrite(f"{self.debug_frames_path}/warped_depth_{frame_id:05d}.png", cv2.convertScaleAbs(warped_depth, alpha=255.0/warped_depth.max()))
+                cv2.imwrite(f"{self.debug_frames_path}/warped_mask_{frame_id:05d}.png", warped_mask * 255)
+
             warped_frame = cv2.rgbd.OdometryFrame.create(
                 warped_amplitude, warped_depth, warped_mask, None, frame_id
             )
@@ -187,7 +206,7 @@ class IcpOdometry:
         init_rt = self.previous_transform.copy()
         if skip != 1:
             init_rt = np.linalg.matrix_power(init_rt, skip)
-
+        init_rt[:3, :3] = Rotation.identity().as_matrix()
         # ICP is now translation-only (transformType=2)
         # Both frames are now aligned to the anchor's orientation
         success, transform = self.icpo.compute2(
