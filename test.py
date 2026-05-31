@@ -39,10 +39,9 @@ def get_poses(test_filename):
                 amplitude, depth, mask, _ = camera.get_frame_rgbd(raw_frame)
                 warped_frame, _ = odometry.prepare_warped_frame(amplitude, depth, mask, frame_idx, rotation)
                 if anchor_frame is not None and warped_frame is not None:
-                    pose, locked, _, = odometry.compute_frame(anchor_frame, warped_frame, rotation)
-                    #print(locked)
+                    pose, success, _, = odometry.compute_frame(anchor_frame, warped_frame, rotation)
                     poses.append(pose)
-                    success_count += locked
+                    success_count += int(success)
                 anchor_frame, _ = odometry.prepare_regular_frame(amplitude, depth, mask, frame_idx)
                 frame_idx += 1
             except EOFError:

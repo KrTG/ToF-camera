@@ -603,6 +603,6 @@ class Streamer:
                 yield output
             if self.watchdog_thread is not None:
                 self.watchdog_thread.ping()
-            time.sleep(0.1)
+            time.sleep(1 / conf.FPS)
 
 streamer = Streamer()
