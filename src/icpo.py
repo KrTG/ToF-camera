@@ -56,7 +56,8 @@ class IcpOdometry:
             maxPointsPart=max_points_part,
             iterCounts=iter_counts,
             minGradientMagnitudes=gradient_magnitudes,
-            transformType=cv2.rgbd.ODOMETRY_TRANSLATION,
+            #transformType=cv2.rgbd.ODOMETRY_TRANSLATION,
+            transformType=cv2.rgbd.ODOMETRY_RIGID_BODY_MOTION
         )
 
         if conf.DEBUG:
@@ -140,16 +141,16 @@ class IcpOdometry:
 
     def integrate_quality_mask(self, mask: np.ndarray):
         """
-        Calculate the quality per frame and integrate it into the 
+        Calculate the quality per frame and integrate it into the
         exponential moving average.
         """
         ratio_unmasked = np.count_nonzero(mask) / mask.size
-        
+
         a = QUALITY_SMOOTHING_ALPHA
         self.quality = (a * ratio_unmasked) + ((1 - a) * self.quality)
 
         return self.quality
-    
+
     def integrate_quality_success(self, success: bool):
         """
         If not successful assume 0 quality as a second measure.

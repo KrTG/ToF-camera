@@ -21,7 +21,10 @@ class TofCamera:
         self.started = False
         self.scale = scale
 
-        self.clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        self.clahe = cv2.createCLAHE(
+            clipLimit=conf.FRAME_AMPLITUDE_CLAHE_CLIP_LIMIT,
+            tileGridSize=(conf.FRAME_AMPLITUDE_CLAHE_GRID_SIZE, conf.FRAME_AMPLITUDE_CLAHE_GRID_SIZE)
+        )
 
     def start(self):
         logger.info("Arducam Depth Camera Streaming.")
@@ -159,7 +162,7 @@ class TofCamera:
                 interpolation=cv2.INTER_AREA,
         )
         amplitude = cv2.convertScaleAbs(amplitude, alpha=alpha)
-        amplitude = cv2.medianBlur(amplitude, 7)
+        amplitude = cv2.medianBlur(amplitude, conf.FRAME_AMPLITUDE_BLUR_WIDTH)
         amplitude = self.clahe.apply(amplitude)
         return amplitude
 
@@ -178,6 +181,11 @@ class TofCamera:
                 interpolation=cv2.INTER_NEAREST_EXACT,
             )
         mask = (confidence >= conf.ICPO_CONFIDENCE).astype(np.uint8) * 255
+
+        kernel = np.ones((7, 7), np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+
         return mask
 
     def get_frame_rgbd(self, frame: ac.DepthData):
