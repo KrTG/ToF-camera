@@ -192,7 +192,7 @@ class IcpOdometry:
         )
         return regular_frame, time.monotonic_ns() - _start_time
 
-    def compute_frame(self, anchor_frame: OdometryFrame, warped_frame: OdometryFrame, rotation: Rotation):
+    def compute_frame(self, anchor_frame: OdometryFrame, warped_frame: OdometryFrame, rotation: Rotation, acceleration: np.ndarray):
         """
         @param anchor_frame: Unwarped previous frame (anchor)
         @param warped_frame: Current warped frame
@@ -207,8 +207,17 @@ class IcpOdometry:
         if skip != 1:
             init_rt = np.linalg.matrix_power(init_rt, skip)
         init_rt[:3, :3] = Rotation.identity().as_matrix()
-        # ICP is now translation-only (transformType=2)
-        # Both frames are now aligned to the anchor's orientation
+
+        dt = skip / conf.FPS
+        a_frd = rotation.inv().apply(acceleration)
+        a_frd += [0, 0, 9.81]
+        a_rdf = self.frd_to_rdf_rotation.apply(self.camera_mount_rotation.inv().apply(a_frd))
+
+        correction = 0.5 * a_rdf * dt * dt
+
+        init_rt[:3, 3] += correction
+        init_rt[:3, 3] *= 0.97 # Apply some damping to reduce 'sliding'
+
         success, transform = self.icpo.compute2(
             anchor_frame, warped_frame, initRt=init_rt
         )

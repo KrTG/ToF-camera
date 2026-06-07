@@ -240,13 +240,16 @@ if __name__ == "__main__":
         state = StateMonitor(
             connection,
             async_messages=["HEARTBEAT", "SYS_STATUS"],
-            sync_messages=["ATTITUDE_QUATERNION"],
+            sync_messages=["ATTITUDE_QUATERNION", "LOCAL_POSITION_NED"],
         )
 
         commander.send_heartbeat()
         commander.wait_heartbeat()
         commander.set_message_interval(
             mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE_QUATERNION, 6500
+        )  # 150 FPS
+        commander.set_message_interval(
+            mavutil.mavlink.MAVLINK_MSG_ID_HIGHRES_IMU, 6500
         )  # 150 FPS
 
         _time = time.monotonic()

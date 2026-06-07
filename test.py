@@ -34,12 +34,13 @@ def get_poses(test_filename):
             try:
                 frame_data = pickle.load(f)
                 raw_frame, extra_data = frame_data
-                rotation = extra_data.get("rotation") or extra_data.get("ROTATION")
+                rotation = extra_data.get("rotation")
+                acceleration = extra_data.get("acceleration")
 
                 amplitude, depth, mask, _ = camera.get_frame_rgbd(raw_frame)
                 warped_frame, _ = odometry.prepare_warped_frame(amplitude, depth, mask, frame_idx, rotation)
                 if anchor_frame is not None and warped_frame is not None:
-                    pose, success, _, = odometry.compute_frame(anchor_frame, warped_frame, rotation)
+                    pose, success, _, = odometry.compute_frame(anchor_frame, warped_frame, rotation, acceleration)
                     poses.append(pose)
                     success_count += int(success)
                 anchor_frame, _ = odometry.prepare_regular_frame(amplitude, depth, mask, frame_idx)

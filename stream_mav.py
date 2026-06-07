@@ -19,6 +19,9 @@ def main():
         mav.Commander(mav_connection).set_message_interval(
             mavutil.mavlink.MAVLINK_MSG_ID_ATTITUDE_QUATERNION, 6500
         )  # 150 FPS
+        mav.Commander(mav_connection).set_message_interval(
+            mavutil.mavlink.MAVLINK_MSG_ID_HIGHRES_IMU, 6500
+        )  # 150 FPS
 
     camera = TofCamera(frame_timeout=0)
     camera.start()

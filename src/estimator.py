@@ -3,11 +3,12 @@ import time
 from threading import Condition, Thread
 from typing import Optional, Tuple
 
+import numpy as np
 from pymavlink import mavutil
 from scipy.spatial.transform import Rotation
 
 from src import conf, mav
-from src.calc import interpolate
+from src.calc import interpolate_attitude, interpolate_acceleration
 from src.icpo import IcpOdometry
 from src.tof_camera import TofCamera
 from src.log import get_logger
@@ -43,7 +44,7 @@ class CameraThread(PipelineThread):
         self.divisor = framerate_divisor
         self.mav_state = None
         if mav_connection:
-            self.mav_state = mav.StateMonitor(mav_connection, async_messages=["SYS_STATUS"], sync_messages=["ATTITUDE_QUATERNION"])
+            self.mav_state = mav.StateMonitor(mav_connection, async_messages=["SYS_STATUS"], sync_messages=["ATTITUDE_QUATERNION", "HIGHRES_IMU"])
         self.frame_counter = 0
 
     def run(self):
@@ -52,7 +53,10 @@ class CameraThread(PipelineThread):
             while self.running:
                 if self.mav_state is not None:
                     self.mav_state.update_state()
+                    if not self.mav_state.is_initialized():
+                        continue
                     att_pre = self.mav_state.current_state["ATTITUDE_QUATERNION"]
+                    pos_pre = self.mav_state.current_state["HIGHRES_IMU"]
 
                 frame = self.camera.get_frame_raw()
                 if self.mav_state is not None:
@@ -71,11 +75,13 @@ class CameraThread(PipelineThread):
                 if self.mav_state is not None:
                     self.mav_state.update_state()
                     att_post = self.mav_state.current_state["ATTITUDE_QUATERNION"]
+                    pos_post = self.mav_state.current_state["HIGHRES_IMU"]
 
                 extra_data = {}
                 if self.mav_state is not None:
                     extra_data["SYS_STATUS"] = self.mav_state.sys_status
-                    extra_data["rotation"] = interpolate(att_pre, att_post, time_ns / 1_000_000)
+                    extra_data["rotation"] = interpolate_attitude(att_pre, att_post, time_ns / 1_000_000)
+                    extra_data["acceleration"] = interpolate_acceleration(pos_pre, pos_post, time_ns / 1_000)
                 extra_data["frame_timestamp"] = time_ns
                 extra_data["ID"] = self.frame_counter // self.divisor
                 frame = (frame, extra_data)
@@ -201,7 +207,7 @@ class ComputeThread(PipelineThread):
 
                 anchor_frame, warped_frame, extra_data = frame
                 pose, success, _time = self.odometry.compute_frame(
-                    anchor_frame, warped_frame, extra_data["rotation"]
+                    anchor_frame, warped_frame, extra_data["rotation"], extra_data["acceleration"]
                 )
                 quality = self.odometry.integrate_quality_success(success)
                 extra_data["compute_time"] = _time
