@@ -143,13 +143,13 @@ class IcpOdometry:
             # DEBUG: Save frames for comparison
             if self.debug_frames_path:
                 # Original frame
-                cv2.imwrite(f"{self.debug_frames_path}/unwarped_amplitude_{frame_id:05d}.png", amplitude)
-                cv2.imwrite(f"{self.debug_frames_path}/unwarped_depth_{frame_id:05d}.png", cv2.convertScaleAbs(depth, alpha=255.0/depth.max()))
-                cv2.imwrite(f"{self.debug_frames_path}/unwarped_mask_{frame_id:05d}.png", mask * 255)
+                cv2.imwrite(f"{self.debug_frames_path}/{frame_id:05d}_unwarped_amplitude.png", amplitude)
+                cv2.imwrite(f"{self.debug_frames_path}/{frame_id:05d}_unwarped_depth.png", cv2.convertScaleAbs(depth, alpha=255.0/depth.max()))
+                cv2.imwrite(f"{self.debug_frames_path}/{frame_id:05d}_unwarped_mask.png", mask)
                 # Warped frame
-                cv2.imwrite(f"{self.debug_frames_path}/warped_amplitude_{frame_id:05d}.png", warped_amplitude)
-                cv2.imwrite(f"{self.debug_frames_path}/warped_depth_{frame_id:05d}.png", cv2.convertScaleAbs(warped_depth, alpha=255.0/warped_depth.max()))
-                cv2.imwrite(f"{self.debug_frames_path}/warped_mask_{frame_id:05d}.png", warped_mask)
+                cv2.imwrite(f"{self.debug_frames_path}/{frame_id:05d}_warped_amplitude.png", warped_amplitude)
+                cv2.imwrite(f"{self.debug_frames_path}/{frame_id:05d}_warped_depth.png", cv2.convertScaleAbs(warped_depth, alpha=255.0/warped_depth.max()))
+                cv2.imwrite(f"{self.debug_frames_path}/{frame_id:05d}_warped_mask.png", warped_mask)
 
             warped_frame = cv2.rgbd.OdometryFrame.create(
                 warped_amplitude, warped_depth, warped_mask, None, frame_id
@@ -209,9 +209,8 @@ class IcpOdometry:
         init_rt[:3, :3] = Rotation.identity().as_matrix()
 
         dt = skip / conf.FPS
-        a_frd = rotation.inv().apply(acceleration)
-        a_frd += [0, 0, 9.81]
-        a_rdf = self.frd_to_rdf_rotation.apply(self.camera_mount_rotation.inv().apply(a_frd))
+        a_corrected = acceleration + rotation.inv().apply([0, 0, 9.81])
+        a_rdf = self.frd_to_rdf_rotation.apply(self.camera_mount_rotation.inv().apply(a_corrected))
 
         correction = 0.5 * a_rdf * dt * dt
 
