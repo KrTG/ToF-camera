@@ -2,7 +2,7 @@ DEBUG=1
 
 RANGE=2000  # milimeters
 
-FRAME_SCALE = 0.73
+FRAME_SCALE = 0.67
 FRAME_DIV = 2
 FPS = 30 / FRAME_DIV
 FRAME_AMPLITUDE_BRIGHTNESS = 0.2
@@ -14,6 +14,6 @@ ICPO_CONFIDENCE=25
 ICPO_MIN_DEPTH=0.1  # meters
 ICPO_MAX_DEPTH=2.4  # meters
 ICPO_MAX_DEPTH_DIFF=0.15  # meters
-ICPO_MAX_POINTS_PART=0.15 # percentage
-ICPO_ITER_COUNTS=[1, 9, 7, 7] # Iterations at full res 1/2 res, 1/4 res etc.
+ICPO_MAX_POINTS_PART=0.75 # percentage
+ICPO_ITER_COUNTS=[1, 10, 10, 10] # Iterations at full res 1/2 res, 1/4 res etc.
 ICPO_GRADIENT_MAGNITUDES=[10, 5, 5, 4] # 1, 1/2, 1/4 etc.
