@@ -123,18 +123,15 @@ class IcpOdometry:
         if self.anchor_attitude is not None:
             relative_attitude = self.anchor_attitude.inv() * attitude
 
-            T_warp = np.eye(4, dtype=np.float32)
-            T_warp[:3, :3] = relative_attitude.as_matrix().astype(np.float32)
-
+            R = relative_attitude.as_matrix().astype(np.float32)
             K = self.cam_matrix
-            distCoeff = np.array([0, 0, 0, 0])
+            K_inv = np.linalg.inv(K)
 
             warped_amplitude = np.zeros_like(amplitude)
             warped_depth = np.zeros_like(depth)
             warped_mask = np.zeros_like(mask)
 
-            R = T_warp[:3, :3]
-            H = K @ R @ np.linalg.inv(K)
+            H = K @ R @ K_inv
 
             warped_amplitude = cv2.warpPerspective(amplitude, H, (amplitude.shape[1], amplitude.shape[0]), flags=cv2.INTER_LINEAR)
             warped_depth = cv2.warpPerspective(depth, H, (depth.shape[1], depth.shape[0]), flags=cv2.INTER_NEAREST)
@@ -144,11 +141,11 @@ class IcpOdometry:
             if self.debug_frames_path:
                 # Original frame
                 cv2.imwrite(f"{self.debug_frames_path}/{frame_id:05d}_unwarped_amplitude.png", amplitude)
-                cv2.imwrite(f"{self.debug_frames_path}/{frame_id:05d}_unwarped_depth.png", cv2.convertScaleAbs(depth, alpha=255.0/depth.max()))
+                cv2.imwrite(f"{self.debug_frames_path}/{frame_id:05d}_unwarped_depth.png", cv2.applyColorMap(cv2.convertScaleAbs(depth, alpha=255.0/depth.max()), cv2.COLORMAP_RAINBOW))
                 cv2.imwrite(f"{self.debug_frames_path}/{frame_id:05d}_unwarped_mask.png", mask)
                 # Warped frame
                 cv2.imwrite(f"{self.debug_frames_path}/{frame_id:05d}_warped_amplitude.png", warped_amplitude)
-                cv2.imwrite(f"{self.debug_frames_path}/{frame_id:05d}_warped_depth.png", cv2.convertScaleAbs(warped_depth, alpha=255.0/warped_depth.max()))
+                cv2.imwrite(f"{self.debug_frames_path}/{frame_id:05d}_warped_depth.png", cv2.applyColorMap(cv2.convertScaleAbs(warped_depth, alpha=255.0/warped_depth.max()), cv2.COLORMAP_RAINBOW))
                 cv2.imwrite(f"{self.debug_frames_path}/{frame_id:05d}_warped_mask.png", warped_mask)
 
             warped_frame = cv2.rgbd.OdometryFrame.create(
