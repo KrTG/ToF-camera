@@ -132,9 +132,17 @@ class IcpOdometry:
             warped_mask = np.zeros_like(mask)
 
             H = K @ R @ K_inv
+            B = R @ K_inv
 
-            warped_amplitude = cv2.warpPerspective(amplitude, H, (amplitude.shape[1], amplitude.shape[0]), flags=cv2.INTER_LINEAR)
-            warped_depth = cv2.warpPerspective(depth, H, (depth.shape[1], depth.shape[0]), flags=cv2.INTER_NEAREST)
+            u_coords = np.arange(depth.shape[1], dtype=np.float32)
+            v_coords = np.arange(depth.shape[0], dtype=np.float32)
+            U, V = np.meshgrid(u_coords, v_coords)
+            rotated_z = B[2, 0] * U + B[2, 1] * V + B[2, 2]
+            scaled_depth = np.zeros_like(depth)
+            scaled_depth = (depth * rotated_z).astype(np.float32)
+
+            warped_amplitude = cv2.warpPerspective(amplitude, H, (amplitude.shape[1], amplitude.shape[0]), flags=cv2.INTER_AREA)
+            warped_depth = cv2.warpPerspective(scaled_depth, H, (depth.shape[1], depth.shape[0]), flags=cv2.INTER_NEAREST)
             warped_mask = cv2.warpPerspective(mask, H, (mask.shape[1], mask.shape[0]), flags=cv2.INTER_NEAREST)
 
             # DEBUG: Save frames for comparison
@@ -206,13 +214,13 @@ class IcpOdometry:
         init_rt[:3, :3] = Rotation.identity().as_matrix()
 
         dt = skip / conf.FPS
-        a_corrected = acceleration + rotation.inv().apply([0, 0, 9.81])
+        a_corrected = acceleration + rotation.inv().apply([0, 0, conf.GRAVITY])
         a_rdf = self.frd_to_rdf_rotation.apply(self.camera_mount_rotation.inv().apply(a_corrected))
 
         correction = 0.5 * a_rdf * dt * dt
 
         init_rt[:3, 3] += correction
-        init_rt[:3, 3] *= 0.97 # Apply some damping to reduce 'sliding'
+        init_rt[:3, 3] *= conf.ICPO_INIT_RT_DAMPING
 
         success, transform = self.icpo.compute2(
             anchor_frame, warped_frame, initRt=init_rt
@@ -229,7 +237,7 @@ class IcpOdometry:
                 self.previous_transform = transform
         else:
             if conf.DEBUG:
-                logger.debug("Lost tracking. Re-set using linear prediction.")
+                logger.debug(f"Lost tracking on frame {warped_frame.ID}. Re-set using linear prediction.")
             # Apply the 'guess' as the real prediction since we lost tracking
             # and it's the best compromise
             self.global_pose @= fast_inversion(init_rt)

@@ -143,6 +143,7 @@ class TofCamera:
                 interpolation=cv2.INTER_NEAREST_EXACT,
             )
         depth = depth.astype(np.float32) / 1000.0
+        depth = cv2.medianBlur(depth, conf.FRAME_DEPTH_BLUR_WIDTH)
         return depth
 
     def get_frame_amplitude(self, frame: ac.DepthData):
