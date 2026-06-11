@@ -183,9 +183,9 @@ class TofCamera:
             )
         mask = (confidence >= conf.ICPO_CONFIDENCE).astype(np.uint8) * 255
 
-        kernel = np.ones((7, 7), np.uint8)
+        kernel = np.ones((3, 3), np.uint8)
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        #mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
         return mask
 

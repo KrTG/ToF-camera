@@ -26,7 +26,7 @@ def get_poses(test_filename):
     ])
     poses = []
     success_count = 0
-    odometry = IcpOdometry(intrinsic_matrix)
+    odometry = IcpOdometry(intrinsic_matrix, conf.FRAME_SIZE)
     anchor_frame = None
     with open(test_filename, "rb") as f:
         frame_idx = 0

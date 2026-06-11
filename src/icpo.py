@@ -41,6 +41,7 @@ class IcpOdometry:
     def __init__(
         self,
         cam_matrix,
+        frame_size,
         min_depth=conf.ICPO_MIN_DEPTH,
         max_depth=conf.ICPO_MAX_DEPTH,
         max_depth_diff=conf.ICPO_MAX_DEPTH_DIFF,
@@ -54,6 +55,9 @@ class IcpOdometry:
             os.makedirs(self.debug_frames_path, exist_ok=True)
 
         self.cam_matrix = cam_matrix.astype(np.float32)
+        self.cam_matrix_inv = np.linalg.inv(self.cam_matrix).astype(np.float32)
+        self.frame_size = frame_size
+
         self.icpo = cv2.rgbd.RgbdICPOdometry.create(
             cameraMatrix=cam_matrix,
             minDepth=min_depth,
@@ -80,8 +84,12 @@ class IcpOdometry:
 
         self.anchor_attitude: Rotation | None = None
         self.previous_transform: np.ndarray = np.eye(4, dtype=np.float64)
-        self.camera_mount_euler = (0, -90, 0) # Camera rotation in the FRD frame - facing down
 
+        u_coords = np.arange(self.frame_size[0], dtype=np.float32)
+        v_coords = np.arange(self.frame_size[1], dtype=np.float32)
+        self.umesh, self.vmesh = np.meshgrid(u_coords, v_coords)
+
+        self.camera_mount_euler = (0, -90, 0) # Camera rotation in the FRD frame - facing down
         self.camera_mount_rotation = Rotation.from_euler('xyz', self.camera_mount_euler, degrees=True)
         self.frd_to_rdf_rotation = Rotation.from_matrix([
             [0, 1, 0],
@@ -125,21 +133,12 @@ class IcpOdometry:
 
             R = relative_attitude.as_matrix().astype(np.float32)
             K = self.cam_matrix
-            K_inv = np.linalg.inv(K)
+            K_inv = self.cam_matrix_inv
 
-            warped_amplitude = np.zeros_like(amplitude)
-            warped_depth = np.zeros_like(depth)
-            warped_mask = np.zeros_like(mask)
-
-            H = K @ R @ K_inv
             B = R @ K_inv
-
-            u_coords = np.arange(depth.shape[1], dtype=np.float32)
-            v_coords = np.arange(depth.shape[0], dtype=np.float32)
-            U, V = np.meshgrid(u_coords, v_coords)
-            rotated_z = B[2, 0] * U + B[2, 1] * V + B[2, 2]
-            scaled_depth = np.zeros_like(depth)
-            scaled_depth = (depth * rotated_z).astype(np.float32)
+            H = K @ B
+            rotated_z = B[2, 0] * self.umesh + B[2, 1] * self.vmesh + B[2, 2]
+            scaled_depth = depth * rotated_z
 
             warped_amplitude = cv2.warpPerspective(amplitude, H, (amplitude.shape[1], amplitude.shape[0]), flags=cv2.INTER_AREA)
             warped_depth = cv2.warpPerspective(scaled_depth, H, (depth.shape[1], depth.shape[0]), flags=cv2.INTER_NEAREST)
