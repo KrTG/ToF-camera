@@ -45,6 +45,8 @@ class CameraThread(PipelineThread):
         self.mav_state = None
         if mav_connection:
             self.mav_state = mav.StateMonitor(mav_connection, async_messages=["SYS_STATUS"], sync_messages=["ATTITUDE_QUATERNION", "HIGHRES_IMU"])
+            for _ in range(30):
+                self.mav_state.timesync()
         self.frame_counter = 0
 
     def run(self):
