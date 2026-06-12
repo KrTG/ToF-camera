@@ -12,7 +12,7 @@ from src import conf
 from src.log import get_logger
 
 
-QUALITY_SMOOTHING_ALPHA = 0.06
+QUALITY_SMOOTHING_ALPHA = 0.08
 
 
 logger = get_logger(__name__)

@@ -172,20 +172,20 @@ class TofCamera:
         Returns a mask based on a confidence level
         """
         confidence = frame.confidence_data
+        depth = frame.depth_data
+        mask = (confidence >= conf.ICPO_CONFIDENCE) & (depth >= conf.ICPO_MIN_DEPTH)
+        mask = mask.astype(np.uint8) * 255
         if self.scale != 1:
-            confidence = cv2.resize(
-                src=confidence,
+            mask = cv2.resize(
+                src=mask,
                 dsize=None,
                 dst=None,
                 fx=self.scale,
                 fy=self.scale,
                 interpolation=cv2.INTER_NEAREST_EXACT,
             )
-        mask = (confidence >= conf.ICPO_CONFIDENCE).astype(np.uint8) * 255
-
         kernel = np.ones((3, 3), np.uint8)
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-        #mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
         return mask
 
