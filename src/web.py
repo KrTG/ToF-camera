@@ -424,7 +424,7 @@ class Streamer:
         self.camera_thread.start()
         self.preprocess_frame_thread = PreprocessFrameThread(self.camera_thread, self.camera)
         self.preprocess_frame_thread.start()
-        self.odometry = IcpOdometry(self.camera.get_intrinsic_matrix())
+        self.odometry = IcpOdometry(self.camera.get_intrinsic_matrix(), conf.FRAME_SIZE)
         self.prepare_cache_thread = PrepareCacheThread(self.preprocess_frame_thread, self.odometry)
         self.compute_thread = ComputeThread(self.prepare_cache_thread, self.odometry)
         self.odometry_saver_thread = OdometrySaverThread(self.compute_thread)

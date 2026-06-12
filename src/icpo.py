@@ -115,6 +115,8 @@ class IcpOdometry:
         # Cached ops
         self.frd_to_rdf_rotation_inv = self.rdf_to_frd_rotation
         self.final_transform = self.rdf_to_frd_transform.T @ self.camera_mount_transform.T
+        self.cam_frd_rdf_rotation_inv = self.camera_mount_rotation * self.frd_to_rdf_rotation_inv
+        self.frd_to_rdf_cam_rotation_inv = self.frd_to_rdf_rotation * self.camera_mount_rotation.inv()
 
         self.quality = 0.0
 
@@ -124,9 +126,8 @@ class IcpOdometry:
             self, amplitude: MatLike, depth: MatLike, mask: MatLike, frame_id: int, rotation: Rotation
         ):
         _start_time = time.monotonic_ns()
-        # Current attitude in RDF frame
-        attitude = rotation * self.camera_mount_rotation
-        attitude = self.frd_to_rdf_rotation * attitude * self.frd_to_rdf_rotation_inv
+
+        attitude = self.frd_to_rdf_rotation * rotation * self.cam_frd_rdf_rotation_inv
         warped_frame = None
         if self.anchor_attitude is not None:
             relative_attitude = self.anchor_attitude.inv() * attitude
@@ -214,7 +215,7 @@ class IcpOdometry:
 
         dt = skip / conf.FPS
         a_corrected = acceleration + rotation.inv().apply([0, 0, conf.GRAVITY])
-        a_rdf = self.frd_to_rdf_rotation.apply(self.camera_mount_rotation.inv().apply(a_corrected))
+        a_rdf = self.frd_to_rdf_cam_rotation_inv.apply(a_corrected)
 
         correction = 0.5 * a_rdf * dt * dt
 
@@ -226,8 +227,7 @@ class IcpOdometry:
         )
         if success:
             self.global_pose @= fast_inversion(transform)
-            attitude = rotation * self.camera_mount_rotation
-            attitude = self.frd_to_rdf_rotation * attitude * self.frd_to_rdf_rotation_inv
+            attitude = self.frd_to_rdf_rotation * rotation * self.cam_frd_rdf_rotation_inv
             self.global_pose[:3, :3] = attitude.as_matrix()
 
             if skip != 1:

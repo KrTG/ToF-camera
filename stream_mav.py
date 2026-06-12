@@ -25,7 +25,7 @@ def main():
 
     camera = TofCamera(frame_timeout=0)
     camera.start()
-    odometry = IcpOdometry(camera.get_intrinsic_matrix())
+    odometry = IcpOdometry(camera.get_intrinsic_matrix(), conf.FRAME_SIZE)
     camera_thread = CameraThread(camera, mav_connection=mav_connection)
     preprocess_frame_thread = PreprocessFrameThread(camera_thread, camera)
     prepare_frame_thread = PrepareCacheThread(preprocess_frame_thread, odometry)
