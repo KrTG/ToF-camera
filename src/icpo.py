@@ -66,8 +66,8 @@ class IcpOdometry:
             maxPointsPart=max_points_part,
             iterCounts=iter_counts,
             minGradientMagnitudes=gradient_magnitudes,
-            transformType=cv2.rgbd.ODOMETRY_TRANSLATION,
-            #transformType=cv2.rgbd.ODOMETRY_RIGID_BODY_MOTION
+            #transformType=cv2.rgbd.ODOMETRY_TRANSLATION,
+            transformType=cv2.rgbd.ODOMETRY_RIGID_BODY_MOTION
         )
 
         if conf.DEBUG:
@@ -219,7 +219,8 @@ class IcpOdometry:
 
         correction = 0.5 * a_rdf * dt * dt
 
-        init_rt[:3, 3] += correction
+        # Subtract the correction - init_rt direction is inverted
+        init_rt[:3, 3] -= correction
         init_rt[:3, 3] *= conf.ICPO_INIT_RT_DAMPING
 
         success, transform = self.icpo.compute2(
@@ -227,9 +228,6 @@ class IcpOdometry:
         )
         if success:
             self.global_pose @= fast_inversion(transform)
-            attitude = self.frd_to_rdf_rotation * rotation * self.cam_frd_rdf_rotation_inv
-            self.global_pose[:3, :3] = attitude.as_matrix()
-
             if skip != 1:
                 self.previous_transform = fractional_se3_power(transform, 1.0 / skip)
             else:
@@ -243,6 +241,9 @@ class IcpOdometry:
 
             # Either reset or set to init_rt - we choose to reset
             self.previous_transform = np.eye(4, dtype=np.float64)
+
+        attitude = self.frd_to_rdf_rotation * rotation * self.cam_frd_rdf_rotation_inv
+        self.global_pose[:3, :3] = attitude.as_matrix()
 
         pose = self.rdf_to_frd_transform @ self.global_pose @ self.final_transform
         return pose, success, time.monotonic_ns() - _start_time
