@@ -4,7 +4,7 @@ GRAVITY=9.81
 
 RANGE=4000  # milimeters
 
-FRAME_SCALE = 0.79
+FRAME_SCALE = 0.73
 FRAME_DIV = 3
 FPS = 30 / FRAME_DIV
 FRAME_SIZE = (round(240 * FRAME_SCALE), round(180 * FRAME_SCALE))
@@ -20,6 +20,6 @@ ICPO_INIT_RT_DAMPING=0.93
 ICPO_MIN_DEPTH=0.1  # meters
 ICPO_MAX_DEPTH=4.2  # meters
 ICPO_MAX_DEPTH_DIFF=0.2  # meters
-ICPO_MAX_POINTS_PART=0.25 # percentage
+ICPO_MAX_POINTS_PART=0.15 # percentage
 ICPO_ITER_COUNTS=[1, 10, 10, 10] # Iterations at full res 1/2 res, 1/4 res etc.
 ICPO_GRADIENT_MAGNITUDES=[10, 5, 5, 4] # 1, 1/2, 1/4 etc.
