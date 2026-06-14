@@ -6,10 +6,13 @@ import numpy as np
 from src import conf
 from src.icpo import IcpOdometry
 from src.tof_camera import TofCamera
-import matplotlib
-import matplotlib.pyplot as plt
+try:
+    import matplotlib
+    import matplotlib.pyplot as plt
 
-matplotlib.use("WebAgg")
+    matplotlib.use("WebAgg")
+except ImportError:
+    matplotlib = None
 
 def get_test_info(readme_path):
     with open(readme_path, "r") as f:
@@ -45,7 +48,7 @@ def get_poses(test_filename):
                     success_count += int(success)
                 anchor_frame, _ = odometry.prepare_regular_frame(amplitude, depth, mask, frame_idx)
                 frame_idx += 1
-            except EOFError:
+            except EOFError, pickle.UnpicklingError:
                 break
     return poses, success_count
 
@@ -129,6 +132,8 @@ def test_rotation(filename):
 
 
 def plot(filename):
+    assert matplotlib is not None
+
     poses, success = get_poses(filename)
 
     translations = np.array([pose[:3, 3] for pose in poses])
