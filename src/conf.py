@@ -1,8 +1,11 @@
-DEBUG=1
+DEBUG=0
 
 GRAVITY=9.81
 
 RANGE=4000  # milimeters
+
+CAM_MOUNT_ORIENTATION = (0, -90, 0) # Camera rotation in the FRD frame - facing down
+CAM_MOUNT_POSITION_FRD = (0.085, 0, 0.065) # In meters
 
 FRAME_SCALE = 0.73
 FRAME_DIV = 3

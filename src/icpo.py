@@ -89,7 +89,8 @@ class IcpOdometry:
         v_coords = np.arange(self.frame_size[1], dtype=np.float32)
         self.umesh, self.vmesh = np.meshgrid(u_coords, v_coords)
 
-        self.camera_mount_euler = (0, -90, 0) # Camera rotation in the FRD frame - facing down
+        self.camera_mount_euler = conf.CAM_MOUNT_ORIENTATION
+        self.camera_mount_frd = conf.CAM_MOUNT_POSITION_FRD
         self.camera_mount_rotation = Rotation.from_euler('xyz', self.camera_mount_euler, degrees=True)
         self.frd_to_rdf_rotation = Rotation.from_matrix([
             [0, 1, 0],
@@ -111,10 +112,11 @@ class IcpOdometry:
 
         self.camera_mount_transform = np.eye(4)
         self.camera_mount_transform[:3, :3] = self.camera_mount_rotation.as_matrix()
+        self.camera_mount_transform[:3, 3] = self.camera_mount_frd
 
         # Cached ops
         self.frd_to_rdf_rotation_inv = self.rdf_to_frd_rotation
-        self.final_transform = self.rdf_to_frd_transform.T @ self.camera_mount_transform.T
+        self.final_transform = self.rdf_to_frd_transform.T @ fast_inversion(self.camera_mount_transform)
         self.cam_frd_rdf_rotation_inv = self.camera_mount_rotation * self.frd_to_rdf_rotation_inv
         self.frd_to_rdf_cam_rotation_inv = self.frd_to_rdf_rotation * self.camera_mount_rotation.inv()
 
