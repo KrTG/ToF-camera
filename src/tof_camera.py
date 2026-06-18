@@ -2,7 +2,10 @@ import time
 
 import cv2
 import numpy as np
-import ArducamDepthCamera as ac
+try:
+    import ArducamDepthCamera as ac
+except ImportError:
+    ArducamDepthCamera = None
 
 from src import conf
 from src.log import get_logger
